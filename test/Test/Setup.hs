@@ -11,6 +11,8 @@ import qualified Data.ByteString.Char8 as BSC
 import Control.Exception
 import Control.Monad
 import Data.Pool
+import qualified Database.PostgreSQL.LibPQ as PQ
+import Database.PostgreSQL.Simple.Internal as Internal
 
 data TestDB = TestDB
   { tempDB     :: Temp.DB
@@ -23,8 +25,8 @@ setupDB = do
 -- tempDB     <- either throwIO return =<< Temp.start
   putStrLn $ Temp.connectionString tempDB
   connection <- createPool
-                  (connectPostgreSQL $ BSC.pack $ Temp.connectionString tempDB)
-                  close
+                  (connectPostgreSQL (BSC.pack $ Temp.connectionString tempDB))
+                  (close)
                   1
                   100000000
                   50
@@ -33,6 +35,7 @@ setupDB = do
 
 teardownDB :: TestDB -> IO ()
 teardownDB TestDB {..} = do
+  putStrLn "Shutting Down"
   destroyAllResources connection
   void $ Temp.stop tempDB
 

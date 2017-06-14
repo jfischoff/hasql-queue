@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving, ScopedTypeVariables, LambdaCase #-}
-{-# LANGUAGE QuasiQuotes, RecordWildCards #-}
+{-# LANGUAGE QuasiQuotes, RecordWildCards, FlexibleContexts #-}
 module Database.Queue where
-import Database.PostgreSQL.Simple (Connection, Only (..))
+import Database.PostgreSQL.Simple (Connection, Only (..), SqlError (..))
 import qualified Database.PostgreSQL.Simple as Simple
 import Database.PostgreSQL.Transact
 import Data.Aeson
@@ -23,6 +23,9 @@ import Database.PostgreSQL.Simple.SqlQQ
 import Database.PostgreSQL.Simple.Notification
 import Data.Function
 import Data.Int
+import Control.Exception as E
+import Control.Monad.Trans.Control
+import Control.Monad.Trans.Reader
 
 newtype PayloadId = PayloadId { unPayloadId :: UUID }
   deriving (Eq, Show, FromField, ToField)
@@ -66,8 +69,8 @@ data Payload = Payload
 instance FromRow Payload where
   fromRow = Payload <$> field <*> field <*> field <*> field
 
-enqueue :: Value -> DB PayloadId
-enqueue value = do
+enqueueDB :: Value -> DB PayloadId
+enqueueDB value = do
   pid <- liftIO randomIO
   execute [sql| INSERT INTO payloads (id, value)
                 VALUES (?, ?);
@@ -75,6 +78,9 @@ enqueue value = do
           |]
           (pid, value)
   return $ PayloadId pid
+
+enqueue :: Connection -> Value -> IO PayloadId
+enqueue conn value = runDBT (enqueueDB value) ReadCommitted conn
 
 unlock = undefined -- use for testing lock and unlock until everything is done
 

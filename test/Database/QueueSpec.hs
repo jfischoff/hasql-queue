@@ -24,7 +24,7 @@ spec = describeDB "Database.Queue" $ do
     tryLockDB `shouldReturn` Nothing
 
   itDB "enqueues/locks/dequeues" $ do
-    payloadId <- enqueue $ String "Hello"
+    payloadId <- enqueueDB $ String "Hello"
     Just Payload {..} <- tryLockDB
 
     pId `shouldBe` payloadId
@@ -47,7 +47,7 @@ spec = describeDB "Database.Queue" $ do
           when (lastCount < 1001) next
 
     -- Fork a hundred threads and enqueue an index
-    forM_ [0 .. 1000 :: Int] $ \i -> forkIO $ void $ runDB testDB $ enqueue $ toJSON i
+    forM_ [0 .. 1000 :: Int] $ \i -> forkIO $ void $ withConnection testDB $ flip enqueue $ toJSON i
 
     let expected = [0 .. 1000 :: Int]
 
@@ -55,20 +55,22 @@ spec = describeDB "Database.Queue" $ do
     Just decoded <- mapM (decode . encode) <$> readIORef ref
     sort decoded `shouldBe` sort expected
 
-
   it "enqueues and dequeues concurrently lock" $ \testDB -> do
     ref <- newIORef []
 
-    loopThreads <- replicateM 10 $ async $ fix $ \next -> do
+    let elementCount = 1000 :: Int
+
+    loopThreads <- replicateM 2 $ async $ fix $ \next -> do
       x <- withConnection testDB lock
       lastCount <- atomicModifyIORef ref $ \xs -> (pValue x : xs, length xs + 1)
       runDB testDB $ dequeue $ pId x
-      when (lastCount < 1001) next
+      when (lastCount < elementCount) next
 
     -- Fork a hundred threads and enqueue an index
-    forM_ [0 .. 1000 :: Int] $ \i -> forkIO $ void $ runDB testDB $ enqueue $ toJSON i
+    forM_ [0 .. elementCount - 1] $ \i -> forkIO $ void $ withConnection testDB $
+      flip enqueue $ toJSON i
 
-    let expected = [0 .. 1000 :: Int]
+    let expected = [0 .. elementCount - 1]
 
     waitAnyCancel loopThreads
     Just decoded <- mapM (decode . encode) <$> readIORef ref
