@@ -60,7 +60,7 @@ spec = describeDB "Database.Queue" $ do
 
     let elementCount = 1000 :: Int
 
-    loopThreads <- replicateM 2 $ async $ fix $ \next -> do
+    loopThreads <- replicateM 10 $ async $ fix $ \next -> do
       x <- withConnection testDB lock
       lastCount <- atomicModifyIORef ref $ \xs -> (pValue x : xs, length xs + 1)
       runDB testDB $ dequeue $ pId x
