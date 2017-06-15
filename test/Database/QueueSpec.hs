@@ -8,11 +8,8 @@ import Data.Aeson
 import Control.Concurrent
 import Data.IORef
 import Control.Monad
-import System.Timeout
 import Data.Function
 import Data.List
-import Data.Maybe
-import Data.Pool
 import Control.Concurrent.Async
 
 main :: IO ()
@@ -31,7 +28,7 @@ spec = describeDB "Database.Queue" $ do
     pValue `shouldBe` String "Hello"
     tryLockDB `shouldReturn` Nothing
 
-    dequeue pId `shouldReturn` ()
+    dequeueDB pId `shouldReturn` ()
     tryLockDB `shouldReturn` Nothing
 
   it "enqueues and dequeues concurrently tryLock" $ \testDB -> do
@@ -43,7 +40,7 @@ spec = describeDB "Database.Queue" $ do
         Nothing -> next
         Just x  -> do
           lastCount <- atomicModifyIORef ref $ \xs -> (pValue x : xs, length xs + 1)
-          runDB testDB $ dequeue $ pId x
+          withConnection testDB $ flip dequeue (pId x)
           when (lastCount < 1001) next
 
     -- Fork a hundred threads and enqueue an index
@@ -63,7 +60,7 @@ spec = describeDB "Database.Queue" $ do
     loopThreads <- replicateM 10 $ async $ fix $ \next -> do
       x <- withConnection testDB lock
       lastCount <- atomicModifyIORef ref $ \xs -> (pValue x : xs, length xs + 1)
-      runDB testDB $ dequeue $ pId x
+      withConnection testDB $ flip dequeue (pId x)
       when (lastCount < elementCount) next
 
     -- Fork a hundred threads and enqueue an index

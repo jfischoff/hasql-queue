@@ -51,6 +51,7 @@ packages:
 extra-deps: [ "tmp-postgres-0.1.0.0"
             , "pg-transact-0.1.0.0"
             , "hspec-expectations-lifted-0.10.0"
+            , "postgresql-simple-opts-0.2.0.0"
             ]
 
 # Override default flag values for local packages and extra-deps

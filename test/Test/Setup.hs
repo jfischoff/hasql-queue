@@ -2,17 +2,13 @@
 module Test.Setup where
 import Test.Hspec
 import Database.Queue.Migrate
-import Database.Queue
 import qualified Database.Postgres.Temp as Temp
 import Database.PostgreSQL.Simple
 import Database.PostgreSQL.Transact
-import Database.PostgreSQL.Simple.Transaction
 import qualified Data.ByteString.Char8 as BSC
 import Control.Exception
 import Control.Monad
 import Data.Pool
-import qualified Database.PostgreSQL.LibPQ as PQ
-import Database.PostgreSQL.Simple.Internal as Internal
 
 data TestDB = TestDB
   { tempDB     :: Temp.DB
