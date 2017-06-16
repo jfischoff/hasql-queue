@@ -1,14 +1,14 @@
 {-# LANGUAGE RecordWildCards #-}
 module Test.Setup where
-import Test.Hspec
-import Database.Queue.Migrate
-import qualified Database.Postgres.Temp as Temp
-import Database.PostgreSQL.Simple
-import Database.PostgreSQL.Transact
-import qualified Data.ByteString.Char8 as BSC
-import Control.Exception
-import Control.Monad
-import Data.Pool
+import           Control.Exception
+import           Control.Monad
+import qualified Data.ByteString.Char8        as BSC
+import           Data.Pool
+import qualified Database.Postgres.Temp       as Temp
+import           Database.PostgreSQL.Simple
+import           Database.PostgreSQL.Transact
+import           Database.Queue.Migrate
+import           Test.Hspec
 
 data TestDB = TestDB
   { tempDB     :: Temp.DB

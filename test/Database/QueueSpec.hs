@@ -1,16 +1,17 @@
-{-# LANGUAGE RecordWildCards, OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Database.QueueSpec (spec, main) where
-import Database.Queue
-import Test.Hspec (Spec, hspec, it)
-import Test.Hspec.Expectations.Lifted
-import Test.Setup
-import Data.Aeson
-import Control.Concurrent
-import Data.IORef
-import Control.Monad
-import Data.Function
-import Data.List
-import Control.Concurrent.Async
+import           Control.Concurrent
+import           Control.Concurrent.Async
+import           Control.Monad
+import           Data.Aeson
+import           Data.Function
+import           Data.IORef
+import           Data.List
+import           Database.Queue
+import           Test.Hspec                     (Spec, hspec, it)
+import           Test.Hspec.Expectations.Lifted
+import           Test.Setup
 
 main :: IO ()
 main = hspec spec

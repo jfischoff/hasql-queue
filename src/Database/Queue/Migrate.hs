@@ -1,8 +1,8 @@
 {-# LANGUAGE QuasiQuotes #-}
 module Database.Queue.Migrate where
-import Database.PostgreSQL.Simple
-import Database.PostgreSQL.Simple.SqlQQ
-import Control.Monad
+import           Control.Monad
+import           Database.PostgreSQL.Simple
+import           Database.PostgreSQL.Simple.SqlQQ
 
 migrate :: Connection -> IO ()
 migrate conn = void $ execute_ conn [sql|

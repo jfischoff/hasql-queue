@@ -1,20 +1,25 @@
-{-# LANGUAGE RecordWildCards, LambdaCase, DeriveDataTypeable, NamedFieldPuns, FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Database.Queue.Main where
-import Database.Queue
-import Control.Monad
+import           Control.Concurrent.Async.Lifted
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Control
+import           Data.Default
+import           Data.Int
+import           Data.Monoid
+import           Data.Pool
+import           Data.Typeable
+import           Database.PostgreSQL.Simple
 import qualified Database.PostgreSQL.Simple.Options as PostgreSQL
-import Database.PostgreSQL.Simple
-import Data.Int
-import Data.Pool
-import Data.Monoid
-import Options.Generic
-import Data.Typeable
-import System.Exit
-import Data.Default
-import Control.Monad.Trans.Control
-import Control.Monad.IO.Class
-import Control.Concurrent.Async.Lifted
+import           Database.Queue
+import           Options.Generic
+import           System.Exit
 
 data PartialOptions = PartialOptions
   { threadCount :: Last Int

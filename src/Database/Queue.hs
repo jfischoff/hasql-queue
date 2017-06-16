@@ -1,33 +1,33 @@
-{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE QuasiQuotes                #-}
 {-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 module Database.Queue where
-import Database.PostgreSQL.Simple (Connection, Only (..))
-import qualified Database.PostgreSQL.Simple as Simple
-import Database.PostgreSQL.Transact
-import Data.Aeson
-import Data.Time
-import Database.PostgreSQL.Simple.Transaction
-import Database.PostgreSQL.Simple.FromRow
-import Database.PostgreSQL.Simple.ToRow
-import Database.PostgreSQL.Simple.FromField
-import Database.PostgreSQL.Simple.ToField
-import Data.UUID
-import Control.Monad
-import Data.Maybe
-import Control.Monad.IO.Class
-import System.Random
-import Data.Text (Text)
-import Database.PostgreSQL.Simple.SqlQQ
-import Database.PostgreSQL.Simple.Notification
-import Data.Function
-import Data.Int
-import Control.Monad.Catch
-import qualified Data.ByteString as BS
+import           Control.Monad
+import           Control.Monad.Catch
+import           Control.Monad.IO.Class
+import           Data.Aeson
+import qualified Data.ByteString                         as BS
+import           Data.Function
+import           Data.Int
+import           Data.Maybe
+import           Data.Text                               (Text)
+import           Data.Time
+import           Data.UUID
+import           Database.PostgreSQL.Simple              (Connection, Only (..))
+import qualified Database.PostgreSQL.Simple              as Simple
+import           Database.PostgreSQL.Simple.FromField
+import           Database.PostgreSQL.Simple.FromRow
+import           Database.PostgreSQL.Simple.Notification
+import           Database.PostgreSQL.Simple.SqlQQ
+import           Database.PostgreSQL.Simple.ToField
+import           Database.PostgreSQL.Simple.ToRow
+import           Database.PostgreSQL.Simple.Transaction
+import           Database.PostgreSQL.Transact
+import           System.Random
 
 -------------------------------------------------------------------------------
 ---  Types
@@ -59,7 +59,7 @@ instance FromField State where
          "enqueued" -> return Enqueued
          "locked"   -> return Locked
          "dequeued" -> return Dequeued
-         x -> returnError ConversionFailed f (show x)
+         x          -> returnError ConversionFailed f (show x)
      else
        returnError Incompatible f $
          "Expect type name to be state but it was " ++ show n
