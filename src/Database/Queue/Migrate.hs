@@ -17,4 +17,3 @@ migrate conn = void $ execute_ conn [sql|
 
     CREATE INDEX status_idx ON payloads (status);
   |]
-

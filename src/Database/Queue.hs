@@ -12,7 +12,7 @@ import Database.PostgreSQL.Simple.ToRow
 import Database.PostgreSQL.Simple.FromField
 import Database.PostgreSQL.Simple.ToField
 import Data.UUID
-import Data.Foldable
+-- import Data.Foldable
 import Control.Monad
 import Data.Maybe
 import Control.Monad.IO.Class
@@ -23,6 +23,9 @@ import Database.PostgreSQL.Simple.Notification
 import Data.Function
 import Data.Int
 
+-------------------------------------------------------------------------------
+---  Types
+-------------------------------------------------------------------------------
 newtype PayloadId = PayloadId { unPayloadId :: UUID }
   deriving (Eq, Show, FromField, ToField)
 
@@ -64,7 +67,9 @@ data Payload = Payload
 
 instance FromRow Payload where
   fromRow = Payload <$> field <*> field <*> field <*> field
-
+-------------------------------------------------------------------------------
+---  DB API
+-------------------------------------------------------------------------------
 enqueueDB :: Value -> DB PayloadId
 enqueueDB value = do
   pid <- liftIO randomIO
@@ -75,24 +80,40 @@ enqueueDB value = do
           (pid, value)
   return $ PayloadId pid
 
-enqueue :: Connection -> Value -> IO PayloadId
-enqueue conn value = runDBT (enqueueDB value) ReadCommitted conn
-
 tryLockDB :: DB (Maybe Payload)
-tryLockDB = do
-  payload <- listToMaybe <$> query_
-    [sql| SELECT id, value, created, status
-          FROM payloads
-          WHERE status='enqueued'
-          LIMIT 1
-    |]
-  for_ payload $ \p -> void $ execute
+tryLockDB = listToMaybe <$> query_
     [sql| UPDATE payloads
           SET status='locked'
-          WHERE id=?
-    |] $
-    pId p
-  return payload
+          WHERE id in
+            ( SELECT id
+              FROM payloads
+              WHERE status='enqueued'
+              LIMIT 1
+            )
+          RETURNING id, value, created, status
+    |]
+
+getCountDB :: DB Int64
+getCountDB = fromOnly . head <$> query_
+  [sql| SELECT count(*)
+        FROM payloads
+        WHERE status='enqueued'
+  |]
+
+dequeueDB :: PayloadId -> DB ()
+dequeueDB queueId
+  = void
+  $ execute
+      [sql| UPDATE payloads
+            SET status='dequeued'
+            WHERE id=?
+      |]
+      queueId
+-------------------------------------------------------------------------------
+---  IO API
+-------------------------------------------------------------------------------
+enqueue :: Connection -> Value -> IO PayloadId
+enqueue conn value = runDBT (enqueueDB value) ReadCommitted conn
 
 tryLock :: Connection -> IO (Maybe Payload)
 tryLock = runDBTSerializable tryLockDB
@@ -118,21 +139,8 @@ lock conn = do
         Simple.execute_ conn "UNLISTEN enqueue"
         return x
 
-dequeueDB :: PayloadId -> DB ()
-dequeueDB queueId
-  = void
-  $ execute
-      [sql| UPDATE payloads
-            SET status='dequeued'
-            WHERE id=?
-      |]
-      queueId
-
 dequeue :: Connection -> PayloadId -> IO ()
 dequeue conn x = runDBTSerializable (dequeueDB x) conn
-
-getCountDB :: DB Int64
-getCountDB = fromOnly . head <$> query_ [sql| SELECT count(*) FROM payloads WHERE status='enqueued' |]
 
 getCount :: Connection -> IO Int64
 getCount = runDBT getCountDB ReadCommitted

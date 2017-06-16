@@ -18,14 +18,13 @@ data TestDB = TestDB
 setupDB :: IO TestDB
 setupDB = do
   tempDB     <- either throwIO return =<< Temp.startAndLogToTmp
--- tempDB     <- either throwIO return =<< Temp.start
   putStrLn $ Temp.connectionString tempDB
   connection <- createPool
-                  (connectPostgreSQL (BSC.pack $ Temp.connectionString tempDB))
-                  (close)
-                  1
-                  100000000
-                  50
+    (connectPostgreSQL (BSC.pack $ Temp.connectionString tempDB))
+    close
+    1
+    100000000
+    50
   withResource connection migrate
   return TestDB {..}
 
@@ -35,11 +34,12 @@ teardownDB TestDB {..} = do
   destroyAllResources connection
   void $ Temp.stop tempDB
 
-withConnection :: TestDB -> (Connection -> IO a) -> IO a
-withConnection testDB = withResource (connection testDB)
+withPool :: TestDB -> (Connection -> IO a) -> IO a
+withPool testDB = withResource (connection testDB)
 
 withDB :: DB a -> TestDB -> IO a
-withDB action testDB = withResource (connection testDB) (runDBTSerializable action)
+withDB action testDB =
+  withResource (connection testDB) (runDBTSerializable action)
 
 runDB :: TestDB -> DB a -> IO a
 runDB = flip withDB
@@ -48,5 +48,6 @@ itDB :: String -> DB a -> SpecWith TestDB
 itDB msg action = it msg $ void . withDB action
 
 describeDB :: String -> SpecWith TestDB -> Spec
-describeDB str = beforeAll setupDB . afterAll teardownDB . describe str
+describeDB str =
+  beforeAll setupDB . afterAll teardownDB . describe str
 
