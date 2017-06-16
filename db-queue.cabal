@@ -16,6 +16,7 @@ cabal-version:       >=1.10
 library
   hs-source-dirs: src
   exposed-modules: Database.Queue
+                 , Database.Queue.Examples.EmailQueue
                  , Database.Queue.Migrate
                  , Database.Queue.Main
   build-depends: base >= 4.7 && < 5
