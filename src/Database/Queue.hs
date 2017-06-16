@@ -5,7 +5,22 @@
 {-# LANGUAGE QuasiQuotes                #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-module Database.Queue where
+module Database.Queue
+  ( PayloadId (..)
+  , State (..)
+  , Payload (..)
+  , enqueueDB
+  , tryLockDB
+  , unlockDB
+  , getCountDB
+  , dequeueDB
+  , enqueue
+  , tryLock
+  , lock
+  , unlock
+  , dequeue
+  , getCount
+  )where
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
@@ -28,7 +43,6 @@ import           Database.PostgreSQL.Simple.ToRow
 import           Database.PostgreSQL.Simple.Transaction
 import           Database.PostgreSQL.Transact
 import           System.Random
-
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
@@ -41,6 +55,11 @@ instance FromRow PayloadId where
 instance ToRow PayloadId where
   toRow = toRow . Only
 
+-- | A 'Payload' can exist in three states in the queue, 'Enqueued', 'Locked'
+--   and 'Dequeue'. A 'Payload' starts in the 'Enqueued' state and is 'Locked'
+--   so some sort of process can occur with it, usually something in 'IO'.
+--   Once the processing is complete, the `Payload' is moved the 'Dequeued'
+--   state, which is the terminal state.
 data State = Enqueued | Locked | Dequeued
   deriving (Show, Eq, Ord, Enum, Bounded)
 
@@ -107,6 +126,14 @@ tryLockDB = listToMaybe <$> query_
           RETURNING id, value, created, state
     |]
 
+unlockDB :: PayloadId -> DB ()
+unlockDB payloadId = void $ execute
+  [sql| UPDATE payloads
+        SET state='enqueued'
+        WHERE id=? AND state='locked'
+  |]
+  payloadId
+
 getCountDB :: DB Int64
 getCountDB = fromOnly . head <$> query_
   [sql| SELECT count(*)
@@ -115,12 +142,12 @@ getCountDB = fromOnly . head <$> query_
   |]
 
 dequeueDB :: PayloadId -> DB ()
-dequeueDB queueId = void $ execute
+dequeueDB payloadId = void $ execute
   [sql| UPDATE payloads
         SET state='dequeued'
         WHERE id=?
   |]
-  queueId
+  payloadId
 -------------------------------------------------------------------------------
 ---  IO API
 -------------------------------------------------------------------------------
@@ -146,6 +173,9 @@ lock conn = bracket_
           notifyPayload conn
           continue
         Just x -> return x
+
+unlock :: Connection -> PayloadId -> IO ()
+unlock conn x = runDBTSerializable (unlockDB x) conn
 
 dequeue :: Connection -> PayloadId -> IO ()
 dequeue conn x = runDBTSerializable (dequeueDB x) conn

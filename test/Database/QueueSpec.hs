@@ -18,16 +18,29 @@ main = hspec spec
 
 spec :: Spec
 spec = describeDB "Database.Queue" $ do
-  itDB "empty locks nothing" $ do
+  itDB "empty locks nothing" $
     tryLockDB `shouldReturn` Nothing
 
-  itDB "enqueues/locks/dequeues" $ do
+  itDB "empty gives count 0" $
+    getCountDB `shouldReturn` 0
+
+  itDB "enqueues/tryLocks/unlocks" $ do
     payloadId <- enqueueDB $ String "Hello"
+    getCountDB `shouldReturn` 1
+
     Just Payload {..} <- tryLockDB
+    getCountDB `shouldReturn` 0
 
     pId `shouldBe` payloadId
     pValue `shouldBe` String "Hello"
     tryLockDB `shouldReturn` Nothing
+
+    unlockDB pId
+    getCountDB `shouldReturn` 1
+
+  itDB "locks/dequeues" $ do
+    Just Payload {..} <- tryLockDB
+    getCountDB `shouldReturn` 0
 
     dequeueDB pId `shouldReturn` ()
     tryLockDB `shouldReturn` Nothing
