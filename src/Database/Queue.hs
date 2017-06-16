@@ -69,6 +69,7 @@ instance ToField State where
     Locked   -> "locked"
     Dequeued -> "dequeued"
 
+-- Converting from enumerations is annoying :(
 instance FromField State where
   fromField f y = do
      n <- typename f
@@ -84,14 +85,16 @@ instance FromField State where
          "Expect type name to be state but it was " ++ show n
 
 data Payload = Payload
-  { pId      :: PayloadId
-  , pValue   :: Value
-  , pCreated :: UTCTime
-  , pState   :: State
+  { pId         :: PayloadId
+  , pValue      :: Value
+  -- ^ The JSON value of a payload
+  , pState      :: State
+  , pCreatedAt  :: UTCTime
+  , pModifiedAt :: UTCTime
   } deriving (Show, Eq)
 
 instance FromRow Payload where
-  fromRow = Payload <$> field <*> field <*> field <*> field
+  fromRow = Payload <$> field <*> field <*> field <*> field <*> field
 -------------------------------------------------------------------------------
 ---  DB API
 -------------------------------------------------------------------------------
@@ -123,7 +126,7 @@ tryLockDB = listToMaybe <$> query_
             WHERE state='enqueued'
             LIMIT 1
           )
-        RETURNING id, value, created, state
+        RETURNING id, value, state, created_at, modified_at
   |]
 
 unlockDB :: PayloadId -> DB ()
