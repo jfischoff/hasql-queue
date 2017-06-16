@@ -30,7 +30,6 @@ setupDB = do
 
 teardownDB :: TestDB -> IO ()
 teardownDB TestDB {..} = do
-  putStrLn "Shutting Down"
   destroyAllResources connection
   void $ Temp.stop tempDB
 
