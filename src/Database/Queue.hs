@@ -1,5 +1,10 @@
-{-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving, ScopedTypeVariables, LambdaCase #-}
-{-# LANGUAGE QuasiQuotes, RecordWildCards, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE QuasiQuotes                #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE FlexibleContexts           #-}
 module Database.Queue where
 import Database.PostgreSQL.Simple (Connection, Only (..))
 import qualified Database.PostgreSQL.Simple as Simple
