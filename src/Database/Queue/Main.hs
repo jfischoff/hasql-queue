@@ -107,7 +107,29 @@ completeOptions = \case
     Options oThreadCount <$> PostgreSQL.completeOptions dbOptions
   _ -> Left ["Missing threadCount"]
 
--- | Helper to create a queue consumer executables.
+{-| This function is a helper for creating queue consumer executables.
+ It takes in a executable
+ name and processing function. It returns a main function which will parse
+ database options on from the command line and spawn a specified number of
+ worker threads. See 'PartialOptions' for command line documentation.
+
+ Here is a simple example that logs out queue payloads
+
+ @
+  defaultMain "queue-logger" $ \payload count -> do
+    print payload
+    print count
+ @
+
+ The worker threads do not attempt to handle exceptions. If an exception is
+ thrown on any threads, all threads are cancel and 'defaultMain' returns. The
+ assumption is the queue executable will get run by a process watcher that
+ can log failures.
+
+ For a more complicated example, see the code for the async-email-example
+ documented in 'Database.Queue.Examples.EmailQueue.EmailQueue'.
+
+-}
 defaultMain :: (MonadIO m, MonadBaseControl IO m)
             => Text
             -- ^ Executable name. Used when command line help

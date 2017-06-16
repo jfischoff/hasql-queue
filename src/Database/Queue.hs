@@ -27,6 +27,17 @@ In another thread or process, the consumer would drain the queue.
       'dequeue' conn $ 'pId' payload
  @
 
+ For a more complete example or a consumer, utilizing the provided
+ 'Database.Queue.Main.defaultMain', see
+ 'Database.Queue.Examples.EmailQueue.EmailQueue'.
+
+This modules provides two flavors of functions, a DB API and an IO API.
+Most operations are provided in both flavors, with the exception of 'lock'.
+'lock' blocks and would not be that useful as part of a larger transaction
+since it would keep the transaction open for a potentially long time. Although
+both flavors are provided, in general one versions is more useful for typical
+use cases.
+
 -}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -144,6 +155,13 @@ handleUniqueViolation handler act = catch act $ \e ->
 {-| Enqueue a new JSON value into the queue. This particularly function
     can be composed as part of a larger database transaction. For instance,
     a single transaction could create a user and enqueue a email message.
+
+ @
+   createAccount userRecord = do
+      'runDBTSerializable' $ do
+         createUserDB userRecord
+         'enqueueDB' $ makeVerificationEmail userRecord
+ @
 -}
 enqueueDB :: Value -> DB PayloadId
 enqueueDB value = handleUniqueViolation (enqueueDB value) $ do
