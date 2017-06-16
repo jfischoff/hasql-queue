@@ -77,7 +77,7 @@ instance FromRow Payload where
 ---  DB API
 -------------------------------------------------------------------------------
 handleUniqueViolation :: MonadCatch m => m a -> m a -> m a
-handleUniqueViolation handler act = catch act $ \e -> do
+handleUniqueViolation handler act = catch act $ \e ->
   if Simple.sqlState e == "23505" &&
      "duplicate key" `BS.isPrefixOf` Simple.sqlErrorMsg e then
     handler
@@ -133,10 +133,7 @@ tryLock = runDBTSerializable tryLockDB
 notifyPayload :: Connection -> IO ()
 notifyPayload conn = do
   Notification {..} <- getNotification conn
-  if notificationChannel == "enqueue" then
-    return ()
-  else
-    notifyPayload conn
+  unless (notificationChannel == "enqueue") $ notifyPayload conn
 
 lock :: Connection -> IO Payload
 lock conn = bracket_
