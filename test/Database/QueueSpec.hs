@@ -38,7 +38,7 @@ spec = describeDB "Database.Queue" $ do
     unlockDB pId
     getCountDB `shouldReturn` 1
 
-  itDB "locks/dequeues" $ do
+  itDB "tryLocks/dequeues" $ do
     Just Payload {..} <- tryLockDB
     getCountDB `shouldReturn` 0
 
