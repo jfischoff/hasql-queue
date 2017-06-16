@@ -22,6 +22,8 @@ import Database.PostgreSQL.Simple.SqlQQ
 import Database.PostgreSQL.Simple.Notification
 import Data.Function
 import Data.Int
+import Control.Monad.Catch
+import qualified Data.ByteString as BS
 
 -------------------------------------------------------------------------------
 ---  Types
@@ -70,8 +72,18 @@ instance FromRow Payload where
 -------------------------------------------------------------------------------
 ---  DB API
 -------------------------------------------------------------------------------
+handleUniqueViolation :: MonadCatch m => m a -> m a -> m a
+handleUniqueViolation handler act = catch act $ \e -> do
+  let msg = "duplicate key"
+  if Simple.sqlState e == "23505" &&
+     -- msg == BS.take (BS.length msg) (Simple.sqlErrorMsg e) then
+     msg `BS.isPrefixOf` Simple.sqlErrorMsg e then
+    handler
+  else
+    throwM e
+
 enqueueDB :: Value -> DB PayloadId
-enqueueDB value = do
+enqueueDB value = handleUniqueViolation (enqueueDB value) $ do
   pid <- liftIO randomIO
   execute [sql| INSERT INTO payloads (id, value)
                 VALUES (?, ?);
