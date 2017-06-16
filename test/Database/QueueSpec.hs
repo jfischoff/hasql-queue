@@ -32,44 +32,47 @@ spec = describeDB "Database.Queue" $ do
     tryLockDB `shouldReturn` Nothing
 
   it "enqueues and dequeues concurrently tryLock" $ \testDB -> do
+    let withPool' = withPool testDB
+        elementCount = 1000 :: Int
+        expected = [0 .. elementCount - 1]
+
     ref <- newIORef []
 
     loopThreads <- replicateM 10 $ async $ fix $ \next -> do
-      mpayload <- withPool testDB tryLock
+      mpayload <- withPool' tryLock
       case mpayload of
         Nothing -> next
-        Just x  -> do
+        Just Payload {..}  -> do
           lastCount <- atomicModifyIORef ref
-                     $ \xs -> (pValue x : xs, length xs + 1)
-          withPool testDB $ flip dequeue (pId x)
-          when (lastCount < 1001) next
+                     $ \xs -> (pValue : xs, length xs + 1)
+          withPool' $ flip dequeue pId
+          when (lastCount < elementCount) next
 
     -- Fork a hundred threads and enqueue an index
-    forM_ [0 .. 1000 :: Int] $ \i ->
-      forkIO $ void $ withPool testDB $ flip enqueue $ toJSON i
-
-    let expected = [0 .. 1000 :: Int]
+    forM_ [0 .. elementCount - 1] $ \i ->
+      forkIO $ void $ withPool' $ flip enqueue $ toJSON i
 
     waitAnyCancel loopThreads
     Just decoded <- mapM (decode . encode) <$> readIORef ref
     sort decoded `shouldBe` sort expected
 
   it "enqueues and dequeues concurrently lock" $ \testDB -> do
+    let withPool' = withPool testDB
+        elementCount = 1000 :: Int
+        expected = [0 .. elementCount - 1]
+
     ref <- newIORef []
 
-    let elementCount = 1000 :: Int
-
     loopThreads <- replicateM 10 $ async $ fix $ \next -> do
-      x <- withPool testDB lock
-      lastCount <- atomicModifyIORef ref $ \xs -> (pValue x : xs, length xs + 1)
-      withPool testDB $ flip dequeue (pId x)
+      Payload {..} <- withPool' lock
+      lastCount <- atomicModifyIORef ref
+                 $ \xs -> (pValue : xs, length xs + 1)
+      withPool' $ flip dequeue pId
       when (lastCount < elementCount) next
 
     -- Fork a hundred threads and enqueue an index
-    forM_ [0 .. elementCount - 1] $ \i -> forkIO $ void $ withPool testDB $
+    forM_ [0 .. elementCount - 1] $ \i -> forkIO $ void $ withPool' $
       flip enqueue $ toJSON i
-
-    let expected = [0 .. elementCount - 1]
 
     waitAnyCancel loopThreads
     Just decoded <- mapM (decode . encode) <$> readIORef ref

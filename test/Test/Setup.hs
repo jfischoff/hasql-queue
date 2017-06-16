@@ -49,4 +49,3 @@ itDB msg action = it msg $ void . withDB action
 describeDB :: String -> SpecWith TestDB -> Spec
 describeDB str =
   beforeAll setupDB . afterAll teardownDB . describe str
-
