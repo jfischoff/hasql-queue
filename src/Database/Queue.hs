@@ -74,10 +74,8 @@ instance FromRow Payload where
 -------------------------------------------------------------------------------
 handleUniqueViolation :: MonadCatch m => m a -> m a -> m a
 handleUniqueViolation handler act = catch act $ \e -> do
-  let msg = "duplicate key"
   if Simple.sqlState e == "23505" &&
-     -- msg == BS.take (BS.length msg) (Simple.sqlErrorMsg e) then
-     msg `BS.isPrefixOf` Simple.sqlErrorMsg e then
+     "duplicate key" `BS.isPrefixOf` Simple.sqlErrorMsg e then
     handler
   else
     throwM e
@@ -139,17 +137,16 @@ notifyPayload conn = do
     notifyPayload conn
 
 lock :: Connection -> IO Payload
-lock conn = do
-  Simple.execute_ conn "LISTEN enqueue"
-  fix $ \continue -> do
-    m <- tryLock conn
-    case m of
-      Nothing -> do
-        notifyPayload conn
-        continue
-      Just x -> do
-        Simple.execute_ conn "UNLISTEN enqueue"
-        return x
+lock conn = bracket_
+  (Simple.execute_ conn "LISTEN enqueue")
+  (Simple.execute_ conn "UNLISTEN enqueue")
+  $ fix $ \continue -> do
+      m <- tryLock conn
+      case m of
+        Nothing -> do
+          notifyPayload conn
+          continue
+        Just x -> return x
 
 dequeue :: Connection -> PayloadId -> IO ()
 dequeue conn x = runDBTSerializable (dequeueDB x) conn
