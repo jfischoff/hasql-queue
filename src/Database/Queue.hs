@@ -12,7 +12,6 @@ import Database.PostgreSQL.Simple.ToRow
 import Database.PostgreSQL.Simple.FromField
 import Database.PostgreSQL.Simple.ToField
 import Data.UUID
--- import Data.Foldable
 import Control.Monad
 import Data.Maybe
 import Control.Monad.IO.Class
@@ -49,8 +48,8 @@ instance ToField State where
 instance FromField State where
   fromField f y = do
      n <- typename f
-     if n == "state" then case y of
-       Nothing -> returnError UnexpectedNull f "status can't be NULL"
+     if n == "state_t" then case y of
+       Nothing -> returnError UnexpectedNull f "state can't be NULL"
        Just y' -> case y' of
          "enqueued" -> return Enqueued
          "locked"   -> return Locked
@@ -58,7 +57,7 @@ instance FromField State where
          x -> returnError ConversionFailed f (show x)
      else
        returnError Incompatible f $
-         "Expect type name to be status but it was " ++ show n
+         "Expect type name to be state but it was " ++ show n
 
 data Payload = Payload
   { pId      :: PayloadId
@@ -93,32 +92,30 @@ enqueueDB value = handleUniqueViolation (enqueueDB value) $ do
 tryLockDB :: DB (Maybe Payload)
 tryLockDB = listToMaybe <$> query_
     [sql| UPDATE payloads
-          SET status='locked'
+          SET state='locked'
           WHERE id in
             ( SELECT id
               FROM payloads
-              WHERE status='enqueued'
+              WHERE state='enqueued'
               LIMIT 1
             )
-          RETURNING id, value, created, status
+          RETURNING id, value, created, state
     |]
 
 getCountDB :: DB Int64
 getCountDB = fromOnly . head <$> query_
   [sql| SELECT count(*)
         FROM payloads
-        WHERE status='enqueued'
+        WHERE state='enqueued'
   |]
 
 dequeueDB :: PayloadId -> DB ()
-dequeueDB queueId
-  = void
-  $ execute
-      [sql| UPDATE payloads
-            SET status='dequeued'
-            WHERE id=?
-      |]
-      queueId
+dequeueDB queueId = void $ execute
+  [sql| UPDATE payloads
+        SET state='dequeued'
+        WHERE id=?
+  |]
+  queueId
 -------------------------------------------------------------------------------
 ---  IO API
 -------------------------------------------------------------------------------
