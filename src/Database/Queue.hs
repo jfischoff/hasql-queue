@@ -115,16 +115,16 @@ enqueueDB value = handleUniqueViolation (enqueueDB value) $ do
 
 tryLockDB :: DB (Maybe Payload)
 tryLockDB = listToMaybe <$> query_
-    [sql| UPDATE payloads
-          SET state='locked'
-          WHERE id in
-            ( SELECT id
-              FROM payloads
-              WHERE state='enqueued'
-              LIMIT 1
-            )
-          RETURNING id, value, created, state
-    |]
+  [sql| UPDATE payloads
+        SET state='locked'
+        WHERE id in
+          ( SELECT id
+            FROM payloads
+            WHERE state='enqueued'
+            LIMIT 1
+          )
+        RETURNING id, value, created, state
+  |]
 
 unlockDB :: PayloadId -> DB ()
 unlockDB payloadId = void $ execute
