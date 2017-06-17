@@ -1,1 +1,1 @@
-# db-testing-example
+# postgresql-simple-queue

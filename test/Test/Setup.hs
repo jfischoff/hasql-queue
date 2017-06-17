@@ -7,7 +7,7 @@ import           Data.Pool
 import qualified Database.Postgres.Temp       as Temp
 import           Database.PostgreSQL.Simple
 import           Database.PostgreSQL.Transact
-import           Database.Queue.Migrate
+import           Database.PostgreSQL.Simple.Queue.Migrate
 import           Test.Hspec
 
 data TestDB = TestDB

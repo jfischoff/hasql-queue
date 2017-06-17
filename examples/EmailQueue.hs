@@ -8,8 +8,8 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.Aeson as Aeson
 import           Data.Text
-import           Database.Queue
-import           Database.Queue.Main
+import           Database.PostgreSQL.Simple.Queue
+import           Database.PostgreSQL.Simple.Queue.Main
 import           GHC.Generics
 import           Network.AWS               as AWS
 import           Network.AWS.SES.SendEmail as AWS
