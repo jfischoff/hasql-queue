@@ -1,4 +1,4 @@
-{-| This module implements a persistent durable queue for efficently processing
+{-| This module utilize PostgreSQL to implement a durable queue for efficently processing
     arbitrary payloads which can be represented as JSON.
 
     Typically a producer would enqueue a new payload as part of larger database
@@ -144,13 +144,15 @@ instance FromRow Payload where
 -------------------------------------------------------------------------------
 ---  DB API
 -------------------------------------------------------------------------------
-handleUniqueViolation :: MonadCatch m => m a -> m a -> m a
-handleUniqueViolation handler act = catch act $ \e ->
-  if Simple.sqlState e == "23505" &&
-     "duplicate key" `BS.isPrefixOf` Simple.sqlErrorMsg e then
-    handler
-  else
-    throwM e
+retryOnUniqueViolation :: MonadCatch m => m a -> m a
+retryOnUniqueViolation act = try act >>= \case
+  Right x -> return x
+  Left e ->
+    if Simple.sqlState e == "23505" &&
+       "duplicate key" `BS.isPrefixOf` Simple.sqlErrorMsg e then
+      act
+    else
+      throwM e
 
 {-| Enqueue a new JSON value into the queue. This particularly function
     can be composed as part of a larger database transaction. For instance,
@@ -164,7 +166,7 @@ handleUniqueViolation handler act = catch act $ \e ->
  @
 -}
 enqueueDB :: Value -> DB PayloadId
-enqueueDB value = handleUniqueViolation (enqueueDB value) $ do
+enqueueDB value = retryOnUniqueViolation $ do
   pid <- liftIO randomIO
   execute [sql| INSERT INTO payloads (id, value)
                 VALUES (?, ?);

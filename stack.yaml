@@ -39,11 +39,11 @@ packages:
 - '.'
 - location:
     git: https://github.com/jfischoff/tmp-postgres
-    commit: 35d0c6d4f64184e75b1d3b21dc2646d76e9d793c
+    commit: 5f090916286f803040b5cb270d05f2e401762cbb
   extra-dep: true
 - location:
     git: https://github.com/jfischoff/pg-transact
-    commit: 86e8bb470be5a417dda44896a29cd1764f0cce69
+    commit: 7a4510c77f13b5b78951f46b00a0bcf35b5855af
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver

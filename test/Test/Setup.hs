@@ -17,7 +17,7 @@ data TestDB = TestDB
 
 setupDB :: IO TestDB
 setupDB = do
-  tempDB     <- either throwIO return =<< Temp.startAndLogToTmp
+  tempDB     <- either throwIO return =<< Temp.startAndLogToTmp []
   putStrLn $ Temp.connectionString tempDB
   connection <- createPool
     (connectPostgreSQL (BSC.pack $ Temp.connectionString tempDB))
