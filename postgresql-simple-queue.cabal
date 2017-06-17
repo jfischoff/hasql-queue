@@ -29,7 +29,7 @@ description:
        -- Remove the payload from future processing
        'dequeue' conn $ 'pId' payload
  @
-homepage:            https://github.com/githubuser/postgresql-queue#readme
+homepage:            https://github.com/jfischoff/postgresql-queue#readme
 license:             BSD3
 license-file:        LICENSE
 author:              Jonathan Fischoff
@@ -87,21 +87,17 @@ test-suite db-testing-example-test
   hs-source-dirs:      test
   main-is: Spec.hs
   other-modules: Database.PostgreSQL.Simple.QueueSpec
-               , Test.Setup
   build-depends: base
                , postgresql-simple-queue
                , hspec
                , hspec-discover
-               , tmp-postgres
                , postgresql-simple
                , pg-transact
                , bytestring
                , aeson
                , hspec-expectations-lifted
-               , text
-               , resource-pool
+               , hspec-pg-transact
                , async
-               , postgresql-libpq
   ghc-options: -Wall -Werror -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 

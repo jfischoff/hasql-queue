@@ -9,15 +9,16 @@ import           Data.Function
 import           Data.IORef
 import           Data.List
 import           Database.PostgreSQL.Simple.Queue
+import           Database.PostgreSQL.Simple.Queue.Migrate
 import           Test.Hspec                     (Spec, hspec, it)
 import           Test.Hspec.Expectations.Lifted
-import           Test.Setup
+import           Test.Hspec.DB
 
 main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = describeDB "Database.Queue" $ do
+spec = describeDB migrate "Database.Queue" $ do
   itDB "empty locks nothing" $
     tryLockDB `shouldReturn` Nothing
 

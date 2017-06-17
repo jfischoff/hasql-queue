@@ -37,19 +37,12 @@ resolver: lts-8.18
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - '.'
-- location:
-    git: https://github.com/jfischoff/tmp-postgres
-    commit: 5f090916286f803040b5cb270d05f2e401762cbb
-  extra-dep: true
-- location:
-    git: https://github.com/jfischoff/pg-transact
-    commit: 7a4510c77f13b5b78951f46b00a0bcf35b5855af
-  extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps: [ "tmp-postgres-0.1.0.0"
+extra-deps: [ "tmp-postgres-0.1.0.3"
             , "pg-transact-0.1.0.0"
+            , "hspec-pg-transact-0.1.0.0"
             , "hspec-expectations-lifted-0.10.0"
             , "postgresql-simple-opts-0.2.0.0"
             ]
