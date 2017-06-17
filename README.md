@@ -6,9 +6,9 @@ Typically a producer would enqueue a new payload as part of larger database tran
 
 ```haskell
 createAccount userRecord = do
-  'runDBTSerializable' $ do
+  runDBTSerializable $ do
     createUserDB userRecord
-    'enqueueDB' $ makeVerificationEmail userRecord
+    enqueueDB $ makeVerificationEmail userRecord
 ```
 
 In another thread or process, the consumer would drain the queue.
@@ -16,13 +16,13 @@ In another thread or process, the consumer would drain the queue.
 ```haskell
   forever $ do
     -- Attempt get a payload or block until one is available
-    payload <- 'lock' conn
+    payload <- lock conn
 
     -- Perform application specifc parsing of the payload value
-    case fromJSON $ 'pValue' payload of
+    case fromJSON $ pValue payload of
       Success x -> sendEmail x -- Perform application specific processing
       Error err -> logErr err
 
     -- Remove the payload from future processing
-    'dequeue' conn $ 'pId' payload
+    dequeue conn $ pId payload
 ```
