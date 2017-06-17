@@ -107,4 +107,4 @@ test-suite db-testing-example-test
 
 source-repository head
   type:     git
-  location: https://github.com/githubuser/db-testing-example
+  location: https://github.com/jfischoff/postgresql-queue
