@@ -26,3 +26,12 @@ In another thread or process, the consumer would drain the queue.
     -- Remove the payload from future processing
     dequeue conn $ pId payload
 ```
+
+## Installation 
+
+```bash
+stack install postgresql-simple-queue
+```
+
+## Blog
+This package was discussed in the blog [Testing PostgreSQL for Fun](https://medium.com/@jonathangfischoff/testing-postgresql-for-fun-af891047e5fc)
