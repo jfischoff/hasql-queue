@@ -91,7 +91,7 @@ instance Default PartialOptions where
 instance ParseRecord PartialOptions where
   parseRecord
      =  PartialOptions
-    <$> parseFields Nothing (Just "thread-count")
+    <$> parseFields Nothing (Just "thread-count") (Just 't')
     <*> parseRecord
 
 -- | Final Options used by 'run'.

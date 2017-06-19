@@ -1,5 +1,5 @@
 name:                postgresql-simple-queue
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis: A PostgreSQL backed queue
 description:
  This module utilize PostgreSQL to implement a durable queue for efficently processing arbitrary payloads which can be represented as JSON.
@@ -16,15 +16,15 @@ description:
  .
  >   forever $ do
  >     -- Attempt get a payload or block until one is available
- >     payload <- 'lock' conn
+ >     payload <- lock conn
  >
  >     -- Perform application specifc parsing of the payload value
- >     case fromJSON $ 'pValue' payload of
+ >     case fromJSON $ pValue payload of
  >       Success x -> sendEmail x -- Perform application specific processing
  >       Error err -> logErr err
  >
  >     -- Remove the payload from future processing
- >     'dequeue' conn $ 'pId' payload
+ >     dequeue conn $ pId payload
 homepage:            https://github.com/jfischoff/postgresql-queue#readme
 license:             BSD3
 license-file:        LICENSE
@@ -54,7 +54,7 @@ library
                , monad-control
                , postgresql-simple-opts
                , resource-pool
-               , optparse-generic
+               , optparse-generic >= 1.2.1
                , data-default
                , monad-control
                , lifted-base
