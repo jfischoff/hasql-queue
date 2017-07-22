@@ -73,38 +73,43 @@ import           System.Exit
 data PartialOptions = PartialOptions
   { threadCount :: Last Int
   , dbOptions   :: PostgreSQL.PartialOptions
+  , schemaName  :: Last String
   } deriving (Show, Eq, Typeable)
 
 instance Monoid PartialOptions where
-  mempty = PartialOptions mempty mempty
+  mempty = PartialOptions mempty mempty mempty
   mappend x y =
     PartialOptions
       (threadCount x <> threadCount y)
       (dbOptions   x <> dbOptions   y)
+      (schemaName  x <> schemaName  y)
 
 -- | The default 'threadCount' is 1.
 --   The default db options are specified in
 --   'Database.PostgreSQL.Simple.Options.PartialOptions'
 instance Default PartialOptions where
-  def = PartialOptions (return 1) def
+  def = PartialOptions (return 1) def $ return "queue"
 
 instance ParseRecord PartialOptions where
   parseRecord
      =  PartialOptions
     <$> parseFields Nothing (Just "thread-count") (Just 't')
     <*> parseRecord
+    <*> parseFields Nothing (Just "schema-name") (Just 's')
 
 -- | Final Options used by 'run'.
 data Options = Options
   { oThreadCount :: Int
   , oDBOptions   :: PostgreSQL.Options
+  , oSchemaName  :: String
   } deriving (Show, Eq)
 
 -- | Convert a 'PartialOptions' to a final 'Options'
 completeOptions :: PartialOptions -> Either [String] Options
 completeOptions = \case
-  PartialOptions { threadCount = Last (Just oThreadCount), dbOptions } ->
-    Options oThreadCount <$> PostgreSQL.completeOptions dbOptions
+  PartialOptions { threadCount = Last (Just oThreadCount), dbOptions, schemaName = Last (Just oSchemaName) } ->
+    Options oThreadCount <$> PostgreSQL.completeOptions dbOptions <*> pure oSchemaName
+
   _ -> Left ["Missing threadCount"]
 
 {-| This function is a helper for creating queue consumer executables.
@@ -166,10 +171,10 @@ run f Options {..} = do
 
   threads :: [Async (StM m ())] <- replicateM oThreadCount $ async $ void $
     forever $ do
-      payload <- liftIO $ withResource connectionPool lock
-      count   <- liftIO $ withResource connectionPool getCount
+      payload <- liftIO $ withResource connectionPool $ lock oSchemaName
+      count   <- liftIO $ withResource connectionPool $ getCount oSchemaName
       f payload count
-      liftIO $ withResource connectionPool $ flip dequeue (pId payload)
+      liftIO $ withResource connectionPool $ \c -> dequeue oSchemaName c (pId payload)
 
   _ :: (Async (StM m ()), ()) <- waitAnyCancel threads
   return ()

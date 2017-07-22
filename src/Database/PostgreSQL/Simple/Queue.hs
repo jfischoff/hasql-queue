@@ -46,6 +46,7 @@ use cases.
 {-# LANGUAGE QuasiQuotes                #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE OverloadedStrings          #-}
 module Database.PostgreSQL.Simple.Queue
   ( -- * Types
     PayloadId (..)
@@ -75,7 +76,7 @@ import           Data.Int
 import           Data.Maybe
 import           Data.Text                               (Text)
 import           Data.Time
-import           Data.UUID
+import           Data.UUID                               (UUID)
 import           Database.PostgreSQL.Simple              (Connection, Only (..))
 import qualified Database.PostgreSQL.Simple              as Simple
 import           Database.PostgreSQL.Simple.FromField
@@ -87,6 +88,8 @@ import           Database.PostgreSQL.Simple.ToRow
 import           Database.PostgreSQL.Simple.Transaction
 import           Database.PostgreSQL.Transact
 import           System.Random
+import           Data.Monoid
+import           Data.String
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
@@ -144,6 +147,12 @@ instance FromRow Payload where
 -------------------------------------------------------------------------------
 ---  DB API
 -------------------------------------------------------------------------------
+withSchema :: String -> Simple.Query -> Simple.Query
+withSchema schemaName q = "SET search_path TO " <> fromString schemaName <> "; " <> q
+
+notifyName :: IsString s => String -> s
+notifyName schemaName = fromString $ schemaName <> "_enqueue"
+
 retryOnUniqueViolation :: MonadCatch m => m a -> m a
 retryOnUniqueViolation act = try act >>= \case
   Right x -> return x
@@ -165,14 +174,16 @@ retryOnUniqueViolation act = try act >>= \case
          'enqueueDB' $ makeVerificationEmail userRecord
  @
 -}
-enqueueDB :: Value -> DB PayloadId
-enqueueDB value = retryOnUniqueViolation $ do
+enqueueDB :: String -> Value -> DB PayloadId
+enqueueDB schemaName value = retryOnUniqueViolation $ do
   pid <- liftIO randomIO
-  execute [sql| INSERT INTO payloads (id, value)
-                VALUES (?, ?);
-                NOTIFY enqueue;
-          |]
-          (pid, value)
+  execute (withSchema schemaName $ [sql|
+    INSERT INTO payloads (id, value)
+    VALUES (?, ?);
+    NOTIFY |] <> " " <> notifyName schemaName <>
+    ";"
+    )
+    (pid, value)
   return $ PayloadId pid
 
 {-| Return a the oldest 'Payload' in the 'Enqueued' state, or 'Nothing'
@@ -181,8 +192,8 @@ enqueueDB value = retryOnUniqueViolation $ do
     with other transactions. See 'tryLock' the IO API version, or for a
     blocking version utilizing PostgreSQL's NOTIFY and LISTEN, see 'lock'
 -}
-tryLockDB :: DB (Maybe Payload)
-tryLockDB = listToMaybe <$> query_
+tryLockDB :: String -> DB (Maybe Payload)
+tryLockDB schemaName = fmap listToMaybe $ query_ $ withSchema schemaName
   [sql| UPDATE payloads
         SET state='locked'
         WHERE id in
@@ -200,26 +211,26 @@ tryLockDB = listToMaybe <$> query_
     shutdown. In general the IO API version, 'unlock', is probably more
     useful. The DB version is provided for completeness.
 -}
-unlockDB :: PayloadId -> DB ()
-unlockDB payloadId = void $ execute
+unlockDB :: String -> PayloadId -> DB ()
+unlockDB schemaName payloadId = void $ execute (withSchema schemaName
   [sql| UPDATE payloads
         SET state='enqueued'
         WHERE id=? AND state='locked'
-  |]
+  |])
   payloadId
 
 -- | Transition a 'Payload' to the 'Dequeued' state.
-dequeueDB :: PayloadId -> DB ()
-dequeueDB payloadId = void $ execute
+dequeueDB :: String -> PayloadId -> DB ()
+dequeueDB schemaName payloadId = void $ execute (withSchema schemaName
   [sql| UPDATE payloads
         SET state='dequeued'
         WHERE id=?
-  |]
+  |])
   payloadId
 
 -- | Get the number of rows in the 'Enqueued' state.
-getCountDB :: DB Int64
-getCountDB = fromOnly . head <$> query_
+getCountDB :: String -> DB Int64
+getCountDB schemaName = fmap (fromOnly . head) $ query_ $ withSchema schemaName
   [sql| SELECT count(*)
         FROM payloads
         WHERE state='enqueued'
@@ -230,36 +241,36 @@ getCountDB = fromOnly . head <$> query_
 {-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
     which can be composed with other queries in a single transaction.
 -}
-enqueue :: Connection -> Value -> IO PayloadId
-enqueue conn value = runDBT (enqueueDB value) ReadCommitted conn
+enqueue :: String -> Connection -> Value -> IO PayloadId
+enqueue schemaName conn value = runDBT (enqueueDB schemaName value) ReadCommitted conn
 
 {-| Return a the oldest 'Payload' in the 'Enqueued' state or 'Nothing'
     if there are no payloads. For a blocking version utilizing PostgreSQL's
     NOTIFY and LISTEN, see 'lock'. This functions runs 'tryLockDB' as a
     'Serializable' transaction.
 -}
-tryLock :: Connection -> IO (Maybe Payload)
-tryLock = runDBTSerializable tryLockDB
+tryLock :: String -> Connection -> IO (Maybe Payload)
+tryLock schemaName conn = runDBTSerializable (tryLockDB schemaName) conn
 
-notifyPayload :: Connection -> IO ()
-notifyPayload conn = do
+notifyPayload :: String -> Connection -> IO ()
+notifyPayload schemaName conn = do
   Notification {..} <- getNotification conn
-  unless (notificationChannel == "enqueue") $ notifyPayload conn
+  unless (notificationChannel == notifyName schemaName) $ notifyPayload schemaName conn
 
 {-| Return the oldest 'Payload' in the 'Enqueued' state or block until a
     payload arrives. This function utilizes PostgreSQL's LISTEN and NOTIFY
     functionality to avoid excessively polling of the DB while
     waiting for new payloads, without scarficing promptness.
 -}
-lock :: Connection -> IO Payload
-lock conn = bracket_
-  (Simple.execute_ conn "LISTEN enqueue")
-  (Simple.execute_ conn "UNLISTEN enqueue")
+lock :: String -> Connection -> IO Payload
+lock schemaName conn = bracket_
+  (Simple.execute_ conn $ "LISTEN " <> notifyName schemaName)
+  (Simple.execute_ conn $ "UNLISTEN " <> notifyName schemaName)
   $ fix $ \continue -> do
-      m <- tryLock conn
+      m <- tryLock schemaName conn
       case m of
         Nothing -> do
-          notifyPayload conn
+          notifyPayload schemaName conn
           continue
         Just x -> return x
 
@@ -267,16 +278,16 @@ lock conn = bracket_
     Useful for responding to asynchronous exceptions during a unexpected
     shutdown. For a DB API version see 'unlockDB'
 -}
-unlock :: Connection -> PayloadId -> IO ()
-unlock conn x = runDBTSerializable (unlockDB x) conn
+unlock :: String -> Connection -> PayloadId -> IO ()
+unlock schemaName conn x = runDBTSerializable (unlockDB schemaName x) conn
 
 -- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
 --   'dequeueDB' as a 'Serializable' transaction.
-dequeue :: Connection -> PayloadId -> IO ()
-dequeue conn x = runDBTSerializable (dequeueDB x) conn
+dequeue :: String -> Connection -> PayloadId -> IO ()
+dequeue schemaName conn x = runDBTSerializable (dequeueDB schemaName x) conn
 
 {-| Get the number of rows in the 'Enqueued' state. This function runs
     'getCountDB' in a 'ReadCommitted' transaction.
 -}
-getCount :: Connection -> IO Int64
-getCount = runDBT getCountDB ReadCommitted
+getCount :: String -> Connection -> IO Int64
+getCount schemaName = runDBT (getCountDB schemaName) ReadCommitted

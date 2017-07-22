@@ -1,8 +1,10 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
 module Database.PostgreSQL.Simple.Queue.Migrate where
 import           Control.Monad
 import           Database.PostgreSQL.Simple
 import           Database.PostgreSQL.Simple.SqlQQ
+import           Data.Monoid
+import           Data.String
 
 {-| This function creates a table and enumeration type that is
     appriopiate for the queue. The following sql is used.
@@ -35,8 +37,10 @@ import           Database.PostgreSQL.Simple.SqlQQ
  language 'plpgsql';
  @
 -}
-migrate :: Connection -> IO ()
-migrate conn = void $ execute_ conn [sql|
+migrate :: String -> Connection -> IO ()
+migrate schemaName conn = void $ execute_ conn $
+  "CREATE SCHEMA IF NOT EXISTS " <> fromString schemaName <> ";" <>
+  "SET search_path TO " <> fromString schemaName <> ";" <> [sql|
   CREATE TYPE state_t AS ENUM ('enqueued', 'locked', 'dequeued');
 
   CREATE TABLE payloads
