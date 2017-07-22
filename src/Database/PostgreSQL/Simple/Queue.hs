@@ -68,15 +68,12 @@ module Database.PostgreSQL.Simple.Queue
   ) where
 import           Control.Monad
 import           Control.Monad.Catch
-import           Control.Monad.IO.Class
 import           Data.Aeson
-import qualified Data.ByteString                         as BS
 import           Data.Function
 import           Data.Int
 import           Data.Maybe
 import           Data.Text                               (Text)
 import           Data.Time
-import           Data.UUID                               (UUID)
 import           Database.PostgreSQL.Simple              (Connection, Only (..))
 import qualified Database.PostgreSQL.Simple              as Simple
 import           Database.PostgreSQL.Simple.FromField
@@ -87,13 +84,12 @@ import           Database.PostgreSQL.Simple.ToField
 import           Database.PostgreSQL.Simple.ToRow
 import           Database.PostgreSQL.Simple.Transaction
 import           Database.PostgreSQL.Transact
-import           System.Random
 import           Data.Monoid
 import           Data.String
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
-newtype PayloadId = PayloadId { unPayloadId :: UUID }
+newtype PayloadId = PayloadId { unPayloadId :: Int64 }
   deriving (Eq, Show, FromField, ToField)
 
 instance FromRow PayloadId where
@@ -153,16 +149,6 @@ withSchema schemaName q = "SET search_path TO " <> fromString schemaName <> "; "
 notifyName :: IsString s => String -> s
 notifyName schemaName = fromString $ schemaName <> "_enqueue"
 
-retryOnUniqueViolation :: MonadCatch m => m a -> m a
-retryOnUniqueViolation act = try act >>= \case
-  Right x -> return x
-  Left e ->
-    if Simple.sqlState e == "23505" &&
-       "duplicate key" `BS.isPrefixOf` Simple.sqlErrorMsg e then
-      act
-    else
-      throwM e
-
 {-| Enqueue a new JSON value into the queue. This particularly function
     can be composed as part of a larger database transaction. For instance,
     a single transaction could create a user and enqueue a email message.
@@ -175,16 +161,14 @@ retryOnUniqueViolation act = try act >>= \case
  @
 -}
 enqueueDB :: String -> Value -> DB PayloadId
-enqueueDB schemaName value = retryOnUniqueViolation $ do
-  pid <- liftIO randomIO
-  execute (withSchema schemaName $ [sql|
-    INSERT INTO payloads (id, value)
-    VALUES (?, ?);
-    NOTIFY |] <> " " <> notifyName schemaName <>
-    ";"
+enqueueDB schemaName value =
+  fmap head $ query (withSchema schemaName $ [sql|
+    NOTIFY |] <> " " <> notifyName schemaName <> ";" <> [sql|
+    INSERT INTO payloads (value)
+    VALUES (?)
+    RETURNING id;|]
     )
-    (pid, value)
-  return $ PayloadId pid
+    $ Only value
 
 {-| Return a the oldest 'Payload' in the 'Enqueued' state, or 'Nothing'
     if there are no payloads. This function is not necessarily useful by
