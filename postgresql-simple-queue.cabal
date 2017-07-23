@@ -1,5 +1,5 @@
 name:                postgresql-simple-queue
-version:             0.2.1.0
+version:             0.3.0.0
 synopsis: A PostgreSQL backed queue
 description:
  This module utilize PostgreSQL to implement a durable queue for efficently processing arbitrary payloads which can be represented as JSON.
@@ -26,7 +26,7 @@ description:
  >     -- Remove the payload from future processing
  >     dequeue "queue_schema" conn $ pId payload
  >
- > To support multiple queues in the same database, the API expects a schema name string
+ > To support multiple queues in the same database, the API expects a table name string
  > to determine which queue tables to use.
 homepage:            https://github.com/jfischoff/postgresql-queue#readme
 license:             BSD3
