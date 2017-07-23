@@ -73,7 +73,7 @@ import           System.Exit
 data PartialOptions = PartialOptions
   { threadCount :: Last Int
   , dbOptions   :: PostgreSQL.PartialOptions
-  , schemaName  :: Last String
+  , tableName  :: Last String
   } deriving (Show, Eq, Typeable)
 
 instance Monoid PartialOptions where
@@ -82,7 +82,7 @@ instance Monoid PartialOptions where
     PartialOptions
       (threadCount x <> threadCount y)
       (dbOptions   x <> dbOptions   y)
-      (schemaName  x <> schemaName  y)
+      (tableName  x <> tableName  y)
 
 -- | The default 'threadCount' is 1.
 --   The default db options are specified in
@@ -107,7 +107,7 @@ data Options = Options
 -- | Convert a 'PartialOptions' to a final 'Options'
 completeOptions :: PartialOptions -> Either [String] Options
 completeOptions = \case
-  PartialOptions { threadCount = Last (Just oThreadCount), dbOptions, schemaName = Last (Just oSchemaName) } ->
+  PartialOptions { threadCount = Last (Just oThreadCount), dbOptions, tableName = Last (Just oSchemaName) } ->
     Options oThreadCount <$> PostgreSQL.completeOptions dbOptions <*> pure oSchemaName
 
   _ -> Left ["Missing threadCount"]

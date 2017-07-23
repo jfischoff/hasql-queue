@@ -143,11 +143,8 @@ instance FromRow Payload where
 -------------------------------------------------------------------------------
 ---  DB API
 -------------------------------------------------------------------------------
-withSchema :: String -> Simple.Query -> Simple.Query
-withSchema schemaName q = "SET search_path TO " <> fromString schemaName <> "; " <> q
-
 notifyName :: IsString s => String -> s
-notifyName schemaName = fromString $ schemaName <> "_enqueue"
+notifyName tableName = fromString $ tableName <> "_enqueue"
 
 {-| Enqueue a new JSON value into the queue. This particularly function
     can be composed as part of a larger database transaction. For instance,
@@ -161,10 +158,10 @@ notifyName schemaName = fromString $ schemaName <> "_enqueue"
  @
 -}
 enqueueDB :: String -> Value -> DB PayloadId
-enqueueDB schemaName value =
-  fmap head $ query (withSchema schemaName $ [sql|
-    NOTIFY |] <> " " <> notifyName schemaName <> ";" <> [sql|
-    INSERT INTO payloads (value)
+enqueueDB tableName value =
+  fmap head $ query ([sql|
+    NOTIFY |] <> " " <> notifyName tableName <> ";" <> [sql|
+    INSERT INTO|] <> " " <> fromString tableName <> " " <> [sql|(value)
     VALUES (?)
     RETURNING id;|]
     )
@@ -177,12 +174,12 @@ enqueueDB schemaName value =
     blocking version utilizing PostgreSQL's NOTIFY and LISTEN, see 'lock'
 -}
 tryLockDB :: String -> DB (Maybe Payload)
-tryLockDB schemaName = fmap listToMaybe $ query_ $ withSchema schemaName
-  [sql| UPDATE payloads
+tryLockDB tableName = fmap listToMaybe $ query_ $
+  [sql| UPDATE|] <> " " <> fromString tableName <> " " <> [sql|
         SET state='locked'
         WHERE id in
           ( SELECT id
-            FROM payloads
+            FROM|] <> " " <> fromString tableName <> " " <> [sql|
             WHERE state='enqueued'
             ORDER BY created_at ASC
             LIMIT 1
@@ -196,8 +193,8 @@ tryLockDB schemaName = fmap listToMaybe $ query_ $ withSchema schemaName
     useful. The DB version is provided for completeness.
 -}
 unlockDB :: String -> PayloadId -> DB ()
-unlockDB schemaName payloadId = void $ execute (withSchema schemaName
-  [sql| UPDATE payloads
+unlockDB tableName payloadId = void $ execute (
+  [sql| UPDATE|] <> " " <> fromString tableName <> " " <> [sql|
         SET state='enqueued'
         WHERE id=? AND state='locked'
   |])
@@ -205,8 +202,8 @@ unlockDB schemaName payloadId = void $ execute (withSchema schemaName
 
 -- | Transition a 'Payload' to the 'Dequeued' state.
 dequeueDB :: String -> PayloadId -> DB ()
-dequeueDB schemaName payloadId = void $ execute (withSchema schemaName
-  [sql| UPDATE payloads
+dequeueDB tableName payloadId = void $ execute (
+  [sql| UPDATE|] <> " " <> fromString tableName <> " " <> [sql|
         SET state='dequeued'
         WHERE id=?
   |])
@@ -214,9 +211,9 @@ dequeueDB schemaName payloadId = void $ execute (withSchema schemaName
 
 -- | Get the number of rows in the 'Enqueued' state.
 getCountDB :: String -> DB Int64
-getCountDB schemaName = fmap (fromOnly . head) $ query_ $ withSchema schemaName
+getCountDB tableName = fmap (fromOnly . head) $ query_ $
   [sql| SELECT count(*)
-        FROM payloads
+        FROM|] <> " " <> fromString tableName <> " " <> [sql|
         WHERE state='enqueued'
   |]
 -------------------------------------------------------------------------------
@@ -226,7 +223,7 @@ getCountDB schemaName = fmap (fromOnly . head) $ query_ $ withSchema schemaName
     which can be composed with other queries in a single transaction.
 -}
 enqueue :: String -> Connection -> Value -> IO PayloadId
-enqueue schemaName conn value = runDBT (enqueueDB schemaName value) ReadCommitted conn
+enqueue tableName conn value = runDBT (enqueueDB tableName value) ReadCommitted conn
 
 {-| Return a the oldest 'Payload' in the 'Enqueued' state or 'Nothing'
     if there are no payloads. For a blocking version utilizing PostgreSQL's
@@ -234,12 +231,12 @@ enqueue schemaName conn value = runDBT (enqueueDB schemaName value) ReadCommitte
     'Serializable' transaction.
 -}
 tryLock :: String -> Connection -> IO (Maybe Payload)
-tryLock schemaName conn = runDBTSerializable (tryLockDB schemaName) conn
+tryLock tableName conn = runDBTSerializable (tryLockDB tableName) conn
 
 notifyPayload :: String -> Connection -> IO ()
-notifyPayload schemaName conn = do
+notifyPayload tableName conn = do
   Notification {..} <- getNotification conn
-  unless (notificationChannel == notifyName schemaName) $ notifyPayload schemaName conn
+  unless (notificationChannel == notifyName tableName) $ notifyPayload tableName conn
 
 {-| Return the oldest 'Payload' in the 'Enqueued' state or block until a
     payload arrives. This function utilizes PostgreSQL's LISTEN and NOTIFY
@@ -247,14 +244,14 @@ notifyPayload schemaName conn = do
     waiting for new payloads, without scarficing promptness.
 -}
 lock :: String -> Connection -> IO Payload
-lock schemaName conn = bracket_
-  (Simple.execute_ conn $ "LISTEN " <> notifyName schemaName)
-  (Simple.execute_ conn $ "UNLISTEN " <> notifyName schemaName)
+lock tableName conn = bracket_
+  (Simple.execute_ conn $ "LISTEN " <> notifyName tableName)
+  (Simple.execute_ conn $ "UNLISTEN " <> notifyName tableName)
   $ fix $ \continue -> do
-      m <- tryLock schemaName conn
+      m <- tryLock tableName conn
       case m of
         Nothing -> do
-          notifyPayload schemaName conn
+          notifyPayload tableName conn
           continue
         Just x -> return x
 
@@ -263,15 +260,15 @@ lock schemaName conn = bracket_
     shutdown. For a DB API version see 'unlockDB'
 -}
 unlock :: String -> Connection -> PayloadId -> IO ()
-unlock schemaName conn x = runDBTSerializable (unlockDB schemaName x) conn
+unlock tableName conn x = runDBTSerializable (unlockDB tableName x) conn
 
 -- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
 --   'dequeueDB' as a 'Serializable' transaction.
 dequeue :: String -> Connection -> PayloadId -> IO ()
-dequeue schemaName conn x = runDBTSerializable (dequeueDB schemaName x) conn
+dequeue tableName conn x = runDBTSerializable (dequeueDB tableName x) conn
 
 {-| Get the number of rows in the 'Enqueued' state. This function runs
     'getCountDB' in a 'ReadCommitted' transaction.
 -}
 getCount :: String -> Connection -> IO Int64
-getCount schemaName = runDBT (getCountDB schemaName) ReadCommitted
+getCount tableName = runDBT (getCountDB tableName) ReadCommitted
