@@ -12,7 +12,7 @@ import           Data.String
  @
  CREATE TYPE state_t AS ENUM ('enqueued', 'locked', 'dequeued');
 
- CREATE TABLE |] <> " " <> fromString tableName <> [sql|
+ CREATE TABLE payloads
  ( id uuid PRIMARY KEY
  , value jsonb NOT NULL
  , state state_t NOT NULL DEFAULT 'enqueued'
@@ -20,7 +20,7 @@ import           Data.String
  , modified_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
  );
 
- CREATE INDEX state_idx ON|] <> " " <> fromString tableName <> " " <> [sql|(state);
+ CREATE INDEX state_idx ON payloads (state);
 
  CREATE OR REPLACE FUNCTION update_row_modified_function_()
  RETURNS TRIGGER
@@ -38,10 +38,12 @@ import           Data.String
  @
 -}
 migrate :: String -> Connection -> IO ()
-migrate tableName conn = void $ execute_ conn $ [sql|
+migrate schemaName conn = void $ execute_ conn $
+  "CREATE SCHEMA IF NOT EXISTS " <> fromString schemaName <> ";" <>
+  "SET search_path TO " <> fromString schemaName <> ";" <> [sql|
   CREATE TYPE state_t AS ENUM ('enqueued', 'locked', 'dequeued');
 
-  CREATE TABLE |] <> " " <> fromString tableName <> [sql|
+  CREATE TABLE payloads
   ( id SERIAL PRIMARY KEY
   , value jsonb NOT NULL
   , state state_t NOT NULL DEFAULT 'enqueued'
@@ -49,7 +51,7 @@ migrate tableName conn = void $ execute_ conn $ [sql|
   , modified_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
   );
 
-  CREATE INDEX state_idx ON |] <> " " <> fromString tableName <> [sql|(state);
+  CREATE INDEX state_idx ON payloads (state);
 
   CREATE OR REPLACE FUNCTION update_row_modified_function_()
   RETURNS TRIGGER

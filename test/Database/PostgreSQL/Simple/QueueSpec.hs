@@ -17,37 +17,37 @@ import           Test.Hspec.DB
 main :: IO ()
 main = hspec spec
 
-tableName :: String
-tableName = "queue"
+schemaName :: String
+schemaName = "queue"
 
 spec :: Spec
-spec = describeDB (migrate tableName) "Database.Queue" $ do
+spec = describeDB (migrate schemaName) "Database.Queue" $ do
   itDB "empty locks nothing" $
-    tryLockDB tableName `shouldReturn` Nothing
+    tryLockDB schemaName `shouldReturn` Nothing
 
   itDB "empty gives count 0" $
-    getCountDB tableName `shouldReturn` 0
+    getCountDB schemaName `shouldReturn` 0
 
   itDB "enqueues/tryLocks/unlocks" $ do
-    payloadId <- enqueueDB tableName $ String "Hello"
-    getCountDB tableName `shouldReturn` 1
+    payloadId <- enqueueDB schemaName $ String "Hello"
+    getCountDB schemaName `shouldReturn` 1
 
-    Just Payload {..} <- tryLockDB tableName
-    getCountDB tableName `shouldReturn` 0
+    Just Payload {..} <- tryLockDB schemaName
+    getCountDB schemaName `shouldReturn` 0
 
     pId `shouldBe` payloadId
     pValue `shouldBe` String "Hello"
-    tryLockDB tableName `shouldReturn` Nothing
+    tryLockDB schemaName `shouldReturn` Nothing
 
-    unlockDB tableName pId
-    getCountDB tableName `shouldReturn` 1
+    unlockDB schemaName pId
+    getCountDB schemaName `shouldReturn` 1
 
   itDB "tryLocks/dequeues" $ do
-    Just Payload {..} <- tryLockDB tableName
-    getCountDB tableName `shouldReturn` 0
+    Just Payload {..} <- tryLockDB schemaName
+    getCountDB schemaName `shouldReturn` 0
 
-    dequeueDB tableName pId `shouldReturn` ()
-    tryLockDB tableName `shouldReturn` Nothing
+    dequeueDB schemaName pId `shouldReturn` ()
+    tryLockDB schemaName `shouldReturn` Nothing
 
   it "enqueues and dequeues concurrently tryLock" $ \testDB -> do
     let withPool' = withPool testDB
@@ -57,18 +57,18 @@ spec = describeDB (migrate tableName) "Database.Queue" $ do
     ref <- newIORef []
 
     loopThreads <- replicateM 10 $ async $ fix $ \next -> do
-      mpayload <- withPool' $ tryLock tableName
+      mpayload <- withPool' $ tryLock schemaName
       case mpayload of
         Nothing -> next
         Just Payload {..}  -> do
           lastCount <- atomicModifyIORef ref
                      $ \xs -> (pValue : xs, length xs + 1)
-          withPool' $ \c -> dequeue tableName c pId
+          withPool' $ \c -> dequeue schemaName c pId
           when (lastCount < elementCount) next
 
     -- Fork a hundred threads and enqueue an index
     forM_ [0 .. elementCount - 1] $ \i ->
-      forkIO $ void $ withPool' $ \c -> enqueue tableName c $ toJSON i
+      forkIO $ void $ withPool' $ \c -> enqueue schemaName c $ toJSON i
 
     waitAnyCancel loopThreads
     Just decoded <- mapM (decode . encode) <$> readIORef ref
@@ -82,15 +82,15 @@ spec = describeDB (migrate tableName) "Database.Queue" $ do
     ref <- newIORef []
 
     loopThreads <- replicateM 10 $ async $ fix $ \next -> do
-      Payload {..} <- withPool' $ lock tableName
+      Payload {..} <- withPool' $ lock schemaName
       lastCount <- atomicModifyIORef ref
                  $ \xs -> (pValue : xs, length xs + 1)
-      withPool' $ \c -> dequeue tableName c pId
+      withPool' $ \c -> dequeue schemaName c pId
       when (lastCount < elementCount) next
 
     -- Fork a hundred threads and enqueue an index
     forM_ [0 .. elementCount - 1] $ \i -> forkIO $ void $ withPool' $ \c ->
-      enqueue tableName c $ toJSON i
+      enqueue schemaName c $ toJSON i
 
     waitAnyCancel loopThreads
     Just decoded <- mapM (decode . encode) <$> readIORef ref
