@@ -1,5 +1,5 @@
 name:                postgresql-simple-queue
-version:             0.4.0.0
+version:             0.5.0.0
 synopsis: A PostgreSQL backed queue
 description:
  This module utilize PostgreSQL to implement a durable queue for efficently processing arbitrary payloads which can be represented as JSON.
@@ -42,44 +42,20 @@ cabal-version:       >=1.10
 library
   hs-source-dirs: src
   exposed-modules: Database.PostgreSQL.Simple.Queue
-                 , Database.PostgreSQL.Simple.Queue.Examples.EmailQueue
                  , Database.PostgreSQL.Simple.Queue.Migrate
-                 , Database.PostgreSQL.Simple.Queue.Main
   build-depends: base >= 4.7 && < 5
                , postgresql-simple
                , pg-transact
                , aeson
                , time
-               , uuid
                , transformers
                , random
                , text
                , monad-control
-               , postgresql-simple-opts
-               , resource-pool
-               , optparse-generic >= 1.2.1
-               , data-default
-               , monad-control
-               , lifted-base
-               , lifted-async
                , exceptions
                , bytestring
   default-language:    Haskell2010
   ghc-options: -Wall -Wno-unused-do-bind
-
-executable async-email-example
-  hs-source-dirs:      examples
-  main-is:             EmailQueue.hs
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
-  build-depends: base
-               , postgresql-simple-queue
-               , amazonka
-               , amazonka-ses
-               , lens
-               , text
-               , aeson
-               , lifted-base
-  default-language:    Haskell2010
 
 test-suite unit-tests
   type:                exitcode-stdio-1.0
