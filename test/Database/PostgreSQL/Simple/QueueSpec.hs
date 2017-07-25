@@ -18,7 +18,7 @@ main :: IO ()
 main = hspec spec
 
 schemaName :: String
-schemaName = "queue"
+schemaName = "complicated_name"
 
 spec :: Spec
 spec = describeDB (migrate schemaName) "Database.Queue" $ do

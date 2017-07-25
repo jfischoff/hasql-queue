@@ -185,6 +185,7 @@ tryLockDB schemaName = fmap listToMaybe $ query_ $ withSchema schemaName
             FROM payloads
             WHERE state='enqueued'
             ORDER BY created_at ASC
+            FOR UPDATE SKIP LOCKED
             LIMIT 1
           )
         RETURNING id, value, state, created_at, modified_at
