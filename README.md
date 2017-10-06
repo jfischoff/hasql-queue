@@ -1,6 +1,6 @@
 # postgresql-simple-queue
 
-This module utilize PostgreSQL to implement a durable queue for efficently processing arbitrary payloads which can be represented as JSON.
+This module utilizes PostgreSQL to implement a durable queue for efficently processing arbitrary payloads which can be represented as JSON.
 
 Typically a producer would enqueue a new payload as part of larger database transaction
 
