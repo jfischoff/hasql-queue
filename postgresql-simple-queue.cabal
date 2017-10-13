@@ -1,5 +1,5 @@
 name:                postgresql-simple-queue
-version:             0.5.1.0
+version:             0.5.1.1
 synopsis: A PostgreSQL backed queue
 description:
  This module utilize PostgreSQL to implement a durable queue for efficently processing arbitrary payloads which can be represented as JSON.

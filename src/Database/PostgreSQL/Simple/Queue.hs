@@ -235,7 +235,7 @@ enqueue schemaName conn value = runDBT (enqueueDB schemaName value) ReadCommitte
     'Serializable' transaction.
 -}
 tryLock :: String -> Connection -> IO (Maybe Payload)
-tryLock schemaName conn = runDBTSerializable (tryLockDB schemaName) conn
+tryLock schemaName conn = runDBT (tryLockDB schemaName) ReadCommitted conn
 
 notifyPayload :: String -> Connection -> IO ()
 notifyPayload schemaName conn = do
