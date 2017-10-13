@@ -264,12 +264,12 @@ lock schemaName conn = bracket_
     shutdown. For a DB API version see 'unlockDB'
 -}
 unlock :: String -> Connection -> PayloadId -> IO ()
-unlock schemaName conn x = runDBTSerializable (unlockDB schemaName x) conn
+unlock schemaName conn x = runDBT  (unlockDB schemaName x) ReadCommitted conn
 
 -- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
 --   'dequeueDB' as a 'Serializable' transaction.
 dequeue :: String -> Connection -> PayloadId -> IO ()
-dequeue schemaName conn x = runDBTSerializable (dequeueDB schemaName x) conn
+dequeue schemaName conn x = runDBT (dequeueDB schemaName x) ReadCommitted conn
 
 {-| Get the number of rows in the 'Enqueued' state. This function runs
     'getCountDB' in a 'ReadCommitted' transaction.
