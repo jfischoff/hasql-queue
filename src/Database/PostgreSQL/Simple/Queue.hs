@@ -54,16 +54,14 @@ module Database.PostgreSQL.Simple.Queue
   , Payload (..)
   -- * DB API
   , enqueueDB
-  , tryLockDB
-  , unlockDB
   , dequeueDB
+  , withPayloadDB
   , getCountDB
   -- * IO API
   , enqueue
-  , tryLock
-  , lock
-  , unlock
+  , tryDequeue
   , dequeue
+  , withPayload
   , getCount
   ) where
 import           Control.Monad
@@ -71,7 +69,6 @@ import           Control.Monad.Catch
 import           Data.Aeson
 import           Data.Function
 import           Data.Int
-import           Data.Maybe
 import           Data.Text                               (Text)
 import           Data.Time
 import           Database.PostgreSQL.Simple              (Connection, Only (..))
@@ -86,6 +83,9 @@ import           Database.PostgreSQL.Simple.Transaction
 import           Database.PostgreSQL.Transact
 import           Data.Monoid
 import           Data.String
+import           Control.Monad.IO.Class
+import           Data.Maybe
+
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
@@ -98,18 +98,32 @@ instance FromRow PayloadId where
 instance ToRow PayloadId where
   toRow = toRow . Only
 
--- | A 'Payload' can exist in three states in the queue, 'Enqueued', 'Locked'
---   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is 'Locked'
+-- The fundemental record stored in the queue. The queue is a single table
+-- and each row consists of a 'Payload'
+data Payload = Payload
+  { pId         :: PayloadId
+  , pValue      :: Value
+  -- ^ The JSON value of a payload
+  , pState      :: State
+  , pAttempts   :: Int
+  , pCreatedAt  :: UTCTime
+  , pModifiedAt :: UTCTime
+  } deriving (Show, Eq)
+
+instance FromRow Payload where
+  fromRow = Payload <$> field <*> field <*> field <*> field <*> field <*> field
+
+-- | A 'Payload' can exist in three states in the queue, 'Enqueued',
+--   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
 --   so some sort of process can occur with it, usually something in 'IO'.
 --   Once the processing is complete, the `Payload' is moved the 'Dequeued'
 --   state, which is the terminal state.
-data State = Enqueued | Locked | Dequeued
+data State = Enqueued | Dequeued
   deriving (Show, Eq, Ord, Enum, Bounded)
 
 instance ToField State where
   toField = toField . \case
     Enqueued -> "enqueued" :: Text
-    Locked   -> "locked"
     Dequeued -> "dequeued"
 
 -- Converting from enumerations is annoying :(
@@ -120,26 +134,12 @@ instance FromField State where
        Nothing -> returnError UnexpectedNull f "state can't be NULL"
        Just y' -> case y' of
          "enqueued" -> return Enqueued
-         "locked"   -> return Locked
          "dequeued" -> return Dequeued
          x          -> returnError ConversionFailed f (show x)
      else
        returnError Incompatible f $
          "Expect type name to be state but it was " ++ show n
 
--- The fundemental record stored in the queue. The queue is a single table
--- and each row consists of a 'Payload'
-data Payload = Payload
-  { pId         :: PayloadId
-  , pValue      :: Value
-  -- ^ The JSON value of a payload
-  , pState      :: State
-  , pCreatedAt  :: UTCTime
-  , pModifiedAt :: UTCTime
-  } deriving (Show, Eq)
-
-instance FromRow Payload where
-  fromRow = Payload <$> field <*> field <*> field <*> field <*> field
 -------------------------------------------------------------------------------
 ---  DB API
 -------------------------------------------------------------------------------
@@ -161,57 +161,81 @@ notifyName schemaName = fromString $ schemaName <> "_enqueue"
  @
 -}
 enqueueDB :: String -> Value -> DB PayloadId
-enqueueDB schemaName value =
+enqueueDB schemaName value = enqueueWithDB schemaName value 0
+
+enqueueWithDB :: String -> Value -> Int -> DB PayloadId
+enqueueWithDB schemaName value attempts =
   fmap head $ query (withSchema schemaName $ [sql|
     NOTIFY |] <> " " <> notifyName schemaName <> ";" <> [sql|
-    INSERT INTO payloads (value)
-    VALUES (?)
+    INSERT INTO payloads (attempts, value)
+    VALUES (?, ?)
     RETURNING id;|]
     )
-    $ Only value
+    $ (attempts, value)
 
-{-| Return a the oldest 'Payload' in the 'Enqueued' state, or 'Nothing'
-    if there are no payloads. This function is not necessarily useful by
-    itself, since there are not many use cases where it needs to be combined
-    with other transactions. See 'tryLock' the IO API version, or for a
-    blocking version utilizing PostgreSQL's NOTIFY and LISTEN, see 'lock'
--}
-tryLockDB :: String -> DB (Maybe Payload)
-tryLockDB schemaName = fmap listToMaybe $ query_ $ withSchema schemaName
+retryDB :: String -> Value -> Int -> DB PayloadId
+retryDB schemaName value attempts = enqueueWithDB schemaName value $ attempts + 1
+
+-- | Transition a 'Payload' to the 'Dequeued' state.
+dequeueDB :: String -> DB (Maybe Payload)
+dequeueDB schemaName = fmap listToMaybe $ query_ $ withSchema schemaName
   [sql| UPDATE payloads
-        SET state='locked'
+        SET state='dequeued'
         WHERE id in
           ( SELECT id
             FROM payloads
             WHERE state='enqueued'
-            ORDER BY created_at ASC
+            ORDER BY modified_at ASC
             FOR UPDATE SKIP LOCKED
             LIMIT 1
           )
-        RETURNING id, value, state, created_at, modified_at
+        RETURNING id, value, state, attempts, created_at, modified_at
   |]
 
-{-| Transition a 'Payload' from the 'Locked' state to the 'Enqueued' state.
-    Useful for responding to asynchronous exceptions during a unexpected
-    shutdown. In general the IO API version, 'unlock', is probably more
-    useful. The DB version is provided for completeness.
--}
-unlockDB :: String -> PayloadId -> DB ()
-unlockDB schemaName payloadId = void $ execute (withSchema schemaName
-  [sql| UPDATE payloads
-        SET state='enqueued'
-        WHERE id=? AND state='locked'
-  |])
-  payloadId
+{-|
 
--- | Transition a 'Payload' to the 'Dequeued' state.
-dequeueDB :: String -> PayloadId -> DB ()
-dequeueDB schemaName payloadId = void $ execute (withSchema schemaName
-  [sql| UPDATE payloads
-        SET state='dequeued'
-        WHERE id=?
-  |])
-  payloadId
+Attempt to get a payload and process it. If the function passed in throws an exception
+return it on the left side of the `Either`. Re-add the payload up to some passed in
+maximum. Return `Nothing` is the `payloads` table is empty otherwise the result is an `a`
+from the payload ingesting function.
+
+-}
+withPayloadDB :: String
+              -- ^ schema
+              -> Int
+              -- ^ retry count
+              -> (Payload -> IO a)
+              -- ^ payload processing function
+              -> DB (Either SomeException (Maybe a))
+withPayloadDB schemaName retryCount f
+  = query_
+    ( withSchema schemaName
+    $ [sql|
+      SELECT id, value, state, attempts, created_at, modified_at
+      FROM payloads
+      WHERE state='enqueued'
+      ORDER BY modified_at ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    |]
+    )
+ >>= \case
+    [] -> return $ return Nothing
+    [payload@Payload {..}] -> do
+      execute [sql| UPDATE payloads SET state='dequeued' WHERE id = ? |] pId
+
+      -- Retry on failure up to retryCount
+      handle (\e -> when (pAttempts < retryCount)
+                         (void $ retryDB schemaName pValue pAttempts)
+                 >> return (Left e)
+             )
+             $ Right . Just <$> liftIO (f payload)
+    xs -> return
+        $ Left
+        $ toException
+        $ userError
+        $ "LIMIT is 1 but got more than one row: "
+        ++ show xs
 
 -- | Get the number of rows in the 'Enqueued' state.
 getCountDB :: String -> DB Int64
@@ -229,47 +253,59 @@ getCountDB schemaName = fmap (fromOnly . head) $ query_ $ withSchema schemaName
 enqueue :: String -> Connection -> Value -> IO PayloadId
 enqueue schemaName conn value = runDBT (enqueueDB schemaName value) ReadCommitted conn
 
-{-| Return a the oldest 'Payload' in the 'Enqueued' state or 'Nothing'
-    if there are no payloads. For a blocking version utilizing PostgreSQL's
-    NOTIFY and LISTEN, see 'lock'. This functions runs 'tryLockDB' as a
-    'Serializable' transaction.
--}
-tryLock :: String -> Connection -> IO (Maybe Payload)
-tryLock schemaName conn = runDBT (tryLockDB schemaName) ReadCommitted conn
-
+-- Block until a payload notification is fired. Fired during insertion.
 notifyPayload :: String -> Connection -> IO ()
 notifyPayload schemaName conn = do
   Notification {..} <- getNotification conn
   unless (notificationChannel == notifyName schemaName) $ notifyPayload schemaName conn
 
-{-| Return the oldest 'Payload' in the 'Enqueued' state or block until a
-    payload arrives. This function utilizes PostgreSQL's LISTEN and NOTIFY
-    functionality to avoid excessively polling of the DB while
-    waiting for new payloads, without scarficing promptness.
+{-| Return a the oldest 'Payload' in the 'Enqueued' state or 'Nothing'
+    if there are no payloads. For a blocking version utilizing PostgreSQL's
+    NOTIFY and LISTEN, see 'dequeue'. This functions runs 'dequeueDb' as a
+    'ReadCommitted' transaction.
+
+  See `withPayload' for an alternative interface that will automatically return
+  the payload to the 'Enqueued' state if an exception occurs.
 -}
-lock :: String -> Connection -> IO Payload
-lock schemaName conn = bracket_
+tryDequeue :: String -> Connection -> IO (Maybe Payload)
+tryDequeue schemaName conn = runDBT (dequeueDB schemaName) ReadCommitted conn
+
+-- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
+--   'dequeueDB' as a 'Serializable' transaction.
+dequeue :: String -> Connection -> IO Payload
+dequeue schemaName conn = bracket_
   (Simple.execute_ conn $ "LISTEN " <> notifyName schemaName)
   (Simple.execute_ conn $ "UNLISTEN " <> notifyName schemaName)
   $ fix $ \continue -> do
-      m <- tryLock schemaName conn
+      m <- tryDequeue schemaName conn
       case m of
         Nothing -> do
           notifyPayload schemaName conn
           continue
         Just x -> return x
 
-{-| Transition a 'Payload' from the 'Locked' state to the 'Enqueued' state.
-    Useful for responding to asynchronous exceptions during a unexpected
-    shutdown. For a DB API version see 'unlockDB'
+{-| Return the oldest 'Payload' in the 'Enqueued' state or block until a
+    payload arrives. This function utilizes PostgreSQL's LISTEN and NOTIFY
+    functionality to avoid excessively polling of the DB while
+    waiting for new payloads, without scarficing promptness.
 -}
-unlock :: String -> Connection -> PayloadId -> IO ()
-unlock schemaName conn x = runDBT  (unlockDB schemaName x) ReadCommitted conn
-
--- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
---   'dequeueDB' as a 'Serializable' transaction.
-dequeue :: String -> Connection -> PayloadId -> IO ()
-dequeue schemaName conn x = runDBT (dequeueDB schemaName x) ReadCommitted conn
+withPayload :: String
+            -> Connection
+            -> Int
+            -- ^ retry count
+            -> (Payload -> IO a)
+            -> IO (Either SomeException a)
+withPayload schemaName conn retryCount f = bracket_
+  (Simple.execute_ conn $ "LISTEN " <> notifyName schemaName)
+  (Simple.execute_ conn $ "UNLISTEN " <> notifyName schemaName)
+  $ fix
+  $ \continue -> runDBT (withPayloadDB schemaName retryCount f) ReadCommitted conn
+  >>= \case
+    Left x -> return $ Left x
+    Right Nothing -> do
+      notifyPayload schemaName conn
+      continue
+    Right (Just x) -> return $ Right x
 
 {-| Get the number of rows in the 'Enqueued' state. This function runs
     'getCountDB' in a 'ReadCommitted' transaction.
