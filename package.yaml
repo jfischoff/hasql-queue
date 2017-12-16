@@ -1,0 +1,101 @@
+name: postgresql-simple-queue
+version: '1.0.0'
+synopsis: A PostgreSQL backed queue
+description: ! 'This module utilize PostgreSQL to implement a durable queue for efficently
+  processing arbitrary payloads which can be represented as JSON.
+
+
+  Typically a producer would enqueue a new payload as part of larger database
+
+  transaction
+
+
+  >  createAccount userRecord = do
+
+  >     ''runDBTSerializable'' $ do
+
+  >        createUserDB userRecord
+
+  >        ''enqueueDB'' "queue_schema" $ makeVerificationEmail userRecord
+
+
+  In another thread or process, the consumer would drain the queue.
+
+
+  >   forever $ do
+
+  >     -- Attempt get a payload or block until one is available
+
+  >     payload <- lock "queue" conn
+
+  >
+
+  >     -- Perform application specifc parsing of the payload value
+
+  >     case fromJSON $ pValue payload of
+
+  >       Success x -> sendEmail x -- Perform application specific processing
+
+  >       Error err -> logErr err
+
+  >
+
+  >     -- Remove the payload from future processing
+
+  >     dequeue "queue" conn $ pId payload
+
+  >
+
+  > To support multiple queues in the same database, the API expects a table name
+  string
+
+  > to determine which queue tables to use.'
+category: Web
+author: Jonathan Fischoff
+maintainer: jonathangfischoff@gmail.com
+copyright: 2017 Jonathan Fischoff
+license: BSD3
+github: jfischoff/postgresql-queue
+extra-source-files:
+- README.md
+ghc-options:
+- -Wall
+- -Wno-unused-do-bind
+
+dependencies:
+- base >=4.7 && <5
+- time
+- transformers
+- random
+- text
+- monad-control
+- exceptions
+- postgresql-simple
+- pg-transact
+- aeson
+- bytestring
+- stm
+
+library:
+  source-dirs: src
+  exposed-modules:
+  - Database.PostgreSQL.Simple.Queue
+  - Database.PostgreSQL.Simple.Queue.Migrate
+
+tests:
+  unit-tests:
+    main: Spec.hs
+    source-dirs: test
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - postgresql-simple-queue
+    - hspec
+    - hspec-discover
+    - hspec-expectations-lifted
+    - hspec-pg-transact
+    - async
+    - split
