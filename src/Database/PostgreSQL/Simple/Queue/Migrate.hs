@@ -43,7 +43,12 @@ migrate schemaName conn = void $ execute_ conn $
   "CREATE SCHEMA IF NOT EXISTS " <> fromString schemaName <> ";" <>
   "SET search_path TO " <> fromString schemaName <> ";" <> [sql|
 
-  CREATE TYPE state_t AS ENUM ('enqueued', 'dequeued');
+  DO $$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'state_t') THEN
+      CREATE TYPE state_t AS ENUM ('enqueued', 'dequeued');
+    END IF;
+  END$$;
 
   CREATE OR REPLACE FUNCTION update_row_modified_function()
   RETURNS TRIGGER AS
@@ -55,7 +60,7 @@ migrate schemaName conn = void $ execute_ conn $
   $$
   language 'plpgsql';
 
-  CREATE TABLE payloads
+  CREATE TABLE IF NOT EXISTS payloads
   ( id BIGSERIAL PRIMARY KEY
   , value jsonb NOT NULL
   , attempts int NOT NULL DEFAULT 0
@@ -64,9 +69,10 @@ migrate schemaName conn = void $ execute_ conn $
   , modified_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
   );
 
-  CREATE INDEX active_created_at_idx ON payloads (created_at)
+  CREATE INDEX IF NOT EXISTS active_created_at_idx ON payloads (created_at)
     WHERE (state = 'enqueued');
 
+  DROP TRIGGER IF EXISTS payloads_modified ON payloads;
   CREATE TRIGGER payloads_modified
   BEFORE UPDATE ON payloads
   FOR EACH ROW EXECUTE PROCEDURE update_row_modified_function();

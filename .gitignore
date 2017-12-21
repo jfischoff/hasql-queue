@@ -56,3 +56,5 @@ tags
 bin/
 core/
 *.s
+
+/postgresql-simple-queue.cabal
