@@ -10,6 +10,7 @@ import           Data.Function
 import           Data.List
 import           Database.PostgreSQL.Simple.Queue
 import           Database.PostgreSQL.Simple.Queue.Migrate
+import           Database.PostgreSQL.Transact (getConnection)
 import           Test.Hspec                     (Spec, hspec, it)
 import           Test.Hspec.Expectations.Lifted
 import           Test.Hspec.DB
@@ -27,6 +28,11 @@ schemaName = "complicated_name"
 
 spec :: Spec
 spec = describeDB (migrate schemaName) "Database.Queue" $ do
+
+  it "is okay to migrate multiple times" $ \db -> runDB db $ do
+      conn <- getConnection
+      replicateM_ 2 $ liftIO $ migrate schemaName conn
+
   itDB "empty locks nothing" $
     (either throwM return =<< (withPayloadDB schemaName 8 return))
       `shouldReturn` Nothing
