@@ -81,7 +81,6 @@ import           Database.PostgreSQL.Simple.ToField
 import           Database.PostgreSQL.Simple.ToRow
 import           Database.PostgreSQL.Simple.Transaction
 import           Database.PostgreSQL.Transact
-import           Data.Monoid
 import           Data.String
 import           Control.Monad.IO.Class
 import           Data.Maybe
