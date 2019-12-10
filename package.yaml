@@ -94,8 +94,10 @@ tests:
     dependencies:
     - postgresql-simple-queue
     - hspec
+    - hspec-core
     - hspec-discover
     - hspec-expectations-lifted
-    - hspec-pg-transact
     - async
     - split
+    - tmp-postgres
+    - resource-pool

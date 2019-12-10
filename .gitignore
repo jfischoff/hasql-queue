@@ -57,4 +57,5 @@ bin/
 core/
 *.s
 
+.test-cache
 /postgresql-simple-queue.cabal
