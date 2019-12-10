@@ -41,12 +41,13 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-  - 'hspec-pg-transact-0.1.0.2'
-  - 'tmp-postgres-0.1.0.7'
+  - 'tmp-postgres-1.30.0.1'
   - 'hspec-expectations-lifted-0.10.0'
   - 'optparse-generic-1.2.2'
-  - 'pg-transact-0.1.0.1'
+  - 'pg-transact-0.2.1.0'
   - 'postgresql-simple-opts-0.2.0.2'
+  - 'generic-monoid-0.1.0.0'
+  - 'postgres-options-0.2.0.0'
 
 # Override default flag values for local packages and extra-deps
 flags: {}

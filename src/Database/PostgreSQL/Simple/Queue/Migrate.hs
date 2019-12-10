@@ -3,7 +3,6 @@ module Database.PostgreSQL.Simple.Queue.Migrate where
 import           Control.Monad
 import           Database.PostgreSQL.Simple
 import           Database.PostgreSQL.Simple.SqlQQ
-import           Data.Monoid
 import           Data.String
 
 {-| This function creates a table and enumeration type that is
@@ -68,6 +67,9 @@ migrate schemaName conn = void $ execute_ conn $
   , created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
   , modified_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
   );
+
+  CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads (modified_at)
+    WHERE (state = 'enqueued');
 
   CREATE INDEX IF NOT EXISTS active_created_at_idx ON payloads (created_at)
     WHERE (state = 'enqueued');
