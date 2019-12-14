@@ -26,6 +26,9 @@ import           Database.Postgres.Temp as Temp
 import           Data.Pool
 import           Data.Foldable
 import           Test.Hspec.Core.Spec (sequential)
+import           Crypto.Hash.SHA1 (hash)
+import qualified Data.ByteString.Base64.URL as Base64
+import qualified Data.ByteString.Char8 as BSC
 
 aroundAll :: forall a. ((a -> IO ()) -> IO ()) -> SpecWith a -> Spec
 aroundAll withFunc specWith = do
@@ -79,7 +82,8 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
 -}
   migratedConfig <- either throwIO pure =<<
       cacheAction
-        ".test-cache/6"
+        (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
+          . BSC.pack $ migrationQueryString schemaName)
         (flip withConn (migrate schemaName))
         (defaultConfig <> cacheConfig dbCache)
   withConfig migratedConfig $ \db -> do
