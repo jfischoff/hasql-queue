@@ -71,8 +71,10 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
              , ("auto_explain.log_nested_statements", "1")
              , ("auto_explain.sample_rate", "1")
              , ("auto_explain.log_level", "WARNING")
+             , ("auto_explain.log_verbose", "on")
              , ("log_connections", "off")
              , ("log_disconnections", "off")
+             , ("auto_explain.log_format", "json")
              ]
 -}
   migratedConfig <- either throwIO pure =<<
