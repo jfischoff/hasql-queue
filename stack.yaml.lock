@@ -5,12 +5,12 @@
 
 packages:
 - completed:
-    hackage: tmp-postgres-1.30.0.1@sha256:927ee69c26d5e284553d39e9a665df70623942260b7f97b711998d5b6ad77e25,4724
+    hackage: tmp-postgres-1.31.0.1@sha256:c0e70298eec7cce553e851f00014bf4858b3db3e3b1454dcbe9de0a9bb9899c4,4724
     pantry-tree:
       size: 816
-      sha256: fb530f8e86c078d0257676ce6739c63a0a4db4c4c15fb5005cc5ece3ba1ccc0c
+      sha256: 637f8315ba6427406911f144cdf8177b774457225fc85abca83a0cd9a988f096
   original:
-    hackage: tmp-postgres-1.30.0.1
+    hackage: tmp-postgres-1.31.0.1
 - completed:
     hackage: hspec-expectations-lifted-0.10.0@sha256:d00d16c52d67e9967418cf9301e45250fd72cec2a87770b64872b23cab038b28,789
     pantry-tree:
