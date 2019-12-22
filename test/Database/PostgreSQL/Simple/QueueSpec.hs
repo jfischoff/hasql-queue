@@ -63,7 +63,7 @@ withConn db f = do
   E.bracket (connectPostgreSQL connStr) close f
 
 withSetup :: (Pool Connection -> IO ()) -> IO ()
-withSetup f = either throwIO pure =<< do
+withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
 {-
   let opts = [ ("log_min_duration_statement", "9ms")
              , ("shared_preload_libraries", "'auto_explain'")
