@@ -36,18 +36,21 @@ aroundAll withFunc specWith = do
     (,,) <$> newEmptyMVar <*> newEmptyMVar <*> newIORef Nothing
   let theStart :: IO a
       theStart = do
-        thread <- async $ withFunc $ \x -> do
-          putMVar var x
-          takeMVar stopper
+
+        thread <- async $ do
+          withFunc $ \x -> do
+            putMVar var x
+            takeMVar stopper
+          pure $ error "Don't evaluate this"
 
         writeIORef asyncer $ Just thread
 
-        takeMVar var
+        either pure pure =<< (wait thread `race` takeMVar var)
 
       theStop :: a -> IO ()
       theStop _ = do
         putMVar stopper ()
-        traverse_ wait =<< readIORef asyncer
+        traverse_ cancel =<< readIORef asyncer
 
   beforeAll theStart $ afterAll theStop $ specWith
 
@@ -60,7 +63,7 @@ withConn db f = do
   E.bracket (connectPostgreSQL connStr) close f
 
 withSetup :: (Pool Connection -> IO ()) -> IO ()
-withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
+withSetup f = either throwIO pure =<< do
 {-
   let opts = [ ("log_min_duration_statement", "9ms")
              , ("shared_preload_libraries", "'auto_explain'")
@@ -85,7 +88,7 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
         (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
           . BSC.pack $ migrationQueryString schemaName)
         (flip withConn (migrate schemaName))
-        (defaultConfig <> cacheConfig dbCache)
+        defaultConfig
   withConfig migratedConfig $ \db -> do
     f =<< createPool
       (connectPostgreSQL $ toConnectionString db)
