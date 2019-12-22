@@ -5,13 +5,6 @@
 
 packages:
 - completed:
-    hackage: tmp-postgres-1.31.0.1@sha256:c0e70298eec7cce553e851f00014bf4858b3db3e3b1454dcbe9de0a9bb9899c4,4724
-    pantry-tree:
-      size: 816
-      sha256: 637f8315ba6427406911f144cdf8177b774457225fc85abca83a0cd9a988f096
-  original:
-    hackage: tmp-postgres-1.31.0.1
-- completed:
     hackage: hspec-expectations-lifted-0.10.0@sha256:d00d16c52d67e9967418cf9301e45250fd72cec2a87770b64872b23cab038b28,789
     pantry-tree:
       size: 247
@@ -46,16 +39,9 @@ packages:
       sha256: 97b556af7f3209f1da5099f50727008d771b72ac0b64b4a640c20f1621eb669b
   original:
     hackage: generic-monoid-0.1.0.0
-- completed:
-    hackage: postgres-options-0.2.0.0@sha256:5e2d6408ed3943f9a056b58106186397b9aa1424c56f1f26668305ce8ea2838f,1604
-    pantry-tree:
-      size: 295
-      sha256: a9fb2bafbaca65c548916e9276ad129302e0b82b7cc9a5c74d3b359a7a77d598
-  original:
-    hackage: postgres-options-0.2.0.0
 snapshots:
 - completed:
-    size: 525663
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/14.yaml
-    sha256: 6edc48df46eb8bf7b861e98dd30d021a92c2e1820c9bb6528aac5d997b0e14ef
-  original: lts-14.14
+    size: 439010
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/12/22.yaml
+    sha256: 821da68dfc5803072ad7c2b23229ec90acf91c64cec75584a7c3b68d45274d65
+  original: nightly-2019-12-22
