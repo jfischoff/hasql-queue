@@ -19,12 +19,12 @@ packages:
   original:
     hackage: optparse-generic-1.2.2
 - completed:
-    hackage: pg-transact-0.2.1.0@sha256:cefa8c06fe7ceb718de30528b0bf9a87e26c114014b6e9cd188010d5d4c7ed46,1516
+    hackage: pg-transact-0.3.1.0@sha256:e8af8acfdfdc9c2462f61fbcc6d4d652710e88f04e08c3cc164b75a8e7bc4651,1619
     pantry-tree:
-      size: 410
-      sha256: 4f366e76eba1044f0765c03461dc4d6b00eaf005ba85ea04451c8d47f86ca02c
+      size: 463
+      sha256: 2e7711962107c9dd09528cad8ce42f3f4c29090f6cc9e8de923a21c94dbc718f
   original:
-    hackage: pg-transact-0.2.1.0
+    hackage: pg-transact-0.3.1.0
 - completed:
     hackage: postgresql-simple-opts-0.2.0.2@sha256:f1852068a4f810614dc7b663a17098b4fc81a8dbef6ab940c368a97d40597137,1778
     pantry-tree:
