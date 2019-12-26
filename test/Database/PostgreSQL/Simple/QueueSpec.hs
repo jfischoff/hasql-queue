@@ -101,7 +101,7 @@ withConnection :: (Connection -> IO ()) -> Pool Connection -> IO ()
 withConnection = flip withResource
 
 withReadCommitted :: T.DB () -> Pool Connection -> IO ()
-withReadCommitted action pool = withResource pool $
+withReadCommitted action pool = E.handle (\T.Abort -> pure ()) $ withResource pool $
   T.runDBT action ReadCommitted
 
 runDB :: Connection -> T.DB a -> IO a
@@ -118,7 +118,7 @@ spec = describe "Database.Queue" $ parallel $ do
         `shouldReturn` Nothing
     it "empty gives count 0" $ withReadCommitted $
       getCountDB schemaName `shouldReturn` 0
-    it "enqueuesDB/withPayloadDB" $ withReadCommitted $ T.rollback $ do
+    it "enqueuesDB/withPayloadDB" $ withReadCommitted $ T.abort $ do
         payloadId <- enqueueDB schemaName $ String "Hello"
         getCountDB schemaName `shouldReturn` 1
 
@@ -129,7 +129,7 @@ spec = describe "Database.Queue" $ parallel $ do
 
         getCountDB schemaName `shouldReturn` 0
 
-    it "enqueuesDB/withPayloadDB/retries" $ withReadCommitted $ T.rollback $ do
+    it "enqueuesDB/withPayloadDB/retries" $ withReadCommitted $ T.abort $ do
       void $ enqueueDB schemaName $ String "Hello"
       getCountDB schemaName `shouldReturn` 1
 
@@ -143,7 +143,7 @@ spec = describe "Database.Queue" $ parallel $ do
         pAttempts `shouldBe` 7
         pValue `shouldBe` String "Hello"
         )
-    it "enqueuesDB/withPayloadDB/timesout" $ withReadCommitted $ T.rollback $  do
+    it "enqueuesDB/withPayloadDB/timesout" $ withReadCommitted $ T.abort $  do
       void $ enqueueDB schemaName $ String "Hello"
       getCountDB schemaName `shouldReturn` 1
 
@@ -155,7 +155,7 @@ spec = describe "Database.Queue" $ parallel $ do
 
       getCountDB schemaName `shouldReturn` 0
 
-    it "selects the oldest first" $ withReadCommitted $ T.rollback $ do
+    it "selects the oldest first" $ withReadCommitted $ T.abort $ do
       payloadId0 <- enqueueDB schemaName $ String "Hello"
       liftIO $ threadDelay 100
 
