@@ -40,12 +40,12 @@ packages:
   original:
     hackage: generic-monoid-0.1.0.0
 - completed:
-    hackage: tmp-postgres-1.34.0.0@sha256:7dd727c205bf9f782497d0757a684acdadfd174eb7283af0f61c46caa052a71a,4753
+    hackage: tmp-postgres-1.34.1.0@sha256:7d6fd2e6f737890857aa60be1ba2828093c057db272e16180e99cd51566fead7,4753
     pantry-tree:
       size: 816
-      sha256: 0ae684e6a8985b77801a10b574b7f0258a7abe208273a89432d4649640eae2db
+      sha256: 328061c9ec70b240b5a247164ba049d56a7e217409cebb69ed528cc280ee3a74
   original:
-    hackage: tmp-postgres-1.34.0.0
+    hackage: tmp-postgres-1.34.1.0
 snapshots:
 - completed:
     size: 439010

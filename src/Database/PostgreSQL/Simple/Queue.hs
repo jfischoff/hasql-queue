@@ -142,11 +142,8 @@ instance FromField State where
 -------------------------------------------------------------------------------
 ---  DB API
 -------------------------------------------------------------------------------
-withSchema :: String -> Simple.Query -> Simple.Query
-withSchema schemaName q = "SET search_path TO " <> fromString schemaName <> "; " <> q
-
-notifyName :: IsString s => String -> s
-notifyName schemaName = fromString $ schemaName <> "_enqueue"
+notifyName :: IsString s => s
+notifyName schemaName = fromString "postgresql_simple_enqueue"
 
 {-| Enqueue a new JSON value into the queue. This particularly function
     can be composed as part of a larger database transaction. For instance,
@@ -159,32 +156,31 @@ notifyName schemaName = fromString $ schemaName <> "_enqueue"
          'enqueueDB' $ makeVerificationEmail userRecord
  @
 -}
-enqueueDB :: String -> Value -> DB PayloadId
-enqueueDB schemaName value = enqueueWithDB schemaName value 0
+enqueueDB :: Value -> DB PayloadId
+enqueueDB value = enqueueWithDB value 0
 
-enqueueWithDB :: String -> Value -> Int -> DB PayloadId
-enqueueWithDB schemaName value attempts =
-  fmap head $ query (withSchema schemaName $ [sql|
-    NOTIFY |] <> " " <> notifyName schemaName <> ";" <> [sql|
+enqueueWithDB :: Value -> Int -> DB PayloadId
+enqueueWithDB value attempts =
+  fmap head $ query [sql|
+    NOTIFY |] <> " " <> notifyName <> ";" <> [sql|
     INSERT INTO payloads (attempts, value)
     VALUES (?, ?)
     RETURNING id;|]
-    )
-    $ (attempts, value)
+    (attempts, value)
 
-retryDB :: String -> Value -> Int -> DB PayloadId
-retryDB schemaName value attempts = enqueueWithDB schemaName value $ attempts + 1
+retryDB :: Value -> Int -> DB PayloadId
+retryDB value attempts = enqueueWithDB value $ attempts + 1
 
 -- | Transition a 'Payload' to the 'Dequeued' state.
-dequeueDB :: String -> DB (Maybe Payload)
-dequeueDB schemaName = fmap listToMaybe $ query_ $ withSchema schemaName
+dequeueDB :: DB (Maybe Payload)
+dequeueDB = fmap listToMaybe $ query_
   [sql| UPDATE payloads
         SET state='dequeued'
         WHERE id in
-          ( SELECT id
-            FROM payloads
-            WHERE state='enqueued'
-            ORDER BY modified_at ASC
+          ( SELECT p1.id
+            FROM payloads AS p1
+            WHERE p1.state='enqueued'
+            ORDER BY p1.modified_at ASC
             FOR UPDATE SKIP LOCKED
             LIMIT 1
           )
@@ -199,17 +195,14 @@ maximum. Return `Nothing` is the `payloads` table is empty otherwise the result 
 from the payload ingesting function.
 
 -}
-withPayloadDB :: String
-              -- ^ schema
-              -> Int
+withPayloadDB :: Int
               -- ^ retry count
               -> (Payload -> IO a)
               -- ^ payload processing function
               -> DB (Either SomeException (Maybe a))
-withPayloadDB schemaName retryCount f
+withPayloadDB retryCount f
   = query_
-    ( withSchema schemaName
-    $ [sql|
+    [sql|
       SELECT id, value, state, attempts, created_at, modified_at
       FROM payloads
       WHERE state='enqueued'
@@ -217,7 +210,6 @@ withPayloadDB schemaName retryCount f
       FOR UPDATE SKIP LOCKED
       LIMIT 1
     |]
-    )
  >>= \case
     [] -> return $ return Nothing
     [payload@Payload {..}] -> do
@@ -237,8 +229,8 @@ withPayloadDB schemaName retryCount f
         ++ show xs
 
 -- | Get the number of rows in the 'Enqueued' state.
-getCountDB :: String -> DB Int64
-getCountDB schemaName = fmap (fromOnly . head) $ query_ $ withSchema schemaName
+getCountDB :: DB Int64
+getCountDB = fmap (fromOnly . head) $ query_
   [sql| SELECT count(*)
         FROM payloads
         WHERE state='enqueued'
@@ -249,14 +241,14 @@ getCountDB schemaName = fmap (fromOnly . head) $ query_ $ withSchema schemaName
 {-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
     which can be composed with other queries in a single transaction.
 -}
-enqueue :: String -> Connection -> Value -> IO PayloadId
-enqueue schemaName conn value = runDBT (enqueueDB schemaName value) ReadCommitted conn
+enqueue :: Connection -> Value -> IO PayloadId
+enqueue conn value = runDBT (enqueueDB value) ReadCommitted conn
 
 -- Block until a payload notification is fired. Fired during insertion.
-notifyPayload :: String -> Connection -> IO ()
-notifyPayload schemaName conn = do
+notifyPayload :: Connection -> IO ()
+notifyPayload conn = do
   Notification {..} <- getNotification conn
-  unless (notificationChannel == notifyName schemaName) $ notifyPayload schemaName conn
+  unless (notificationChannel == notifyName) $ notifyPayload conn
 
 {-| Return a the oldest 'Payload' in the 'Enqueued' state or 'Nothing'
     if there are no payloads. For a blocking version utilizing PostgreSQL's
@@ -266,20 +258,20 @@ notifyPayload schemaName conn = do
   See `withPayload' for an alternative interface that will automatically return
   the payload to the 'Enqueued' state if an exception occurs.
 -}
-tryDequeue :: String -> Connection -> IO (Maybe Payload)
-tryDequeue schemaName conn = runDBT (dequeueDB schemaName) ReadCommitted conn
+tryDequeue :: Connection -> IO (Maybe Payload)
+tryDequeue conn = runDBT dequeueDB ReadCommitted conn
 
 -- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
 --   'dequeueDB' as a 'Serializable' transaction.
-dequeue :: String -> Connection -> IO Payload
-dequeue schemaName conn = bracket_
-  (Simple.execute_ conn $ "LISTEN " <> notifyName schemaName)
-  (Simple.execute_ conn $ "UNLISTEN " <> notifyName schemaName)
+dequeue :: Connection -> IO Payload
+dequeue conn = bracket_
+  (Simple.execute_ conn $ "LISTEN " <> notifyName)
+  (Simple.execute_ conn $ "UNLISTEN " <> notifyName)
   $ fix $ \continue -> do
-      m <- tryDequeue schemaName conn
+      m <- tryDequeue conn
       case m of
         Nothing -> do
-          notifyPayload schemaName conn
+          notifyPayload conn
           continue
         Just x -> return x
 
@@ -288,26 +280,25 @@ dequeue schemaName conn = bracket_
     functionality to avoid excessively polling of the DB while
     waiting for new payloads, without scarficing promptness.
 -}
-withPayload :: String
-            -> Connection
+withPayload :: Connection
             -> Int
             -- ^ retry count
             -> (Payload -> IO a)
             -> IO (Either SomeException a)
-withPayload schemaName conn retryCount f = bracket_
-  (Simple.execute_ conn $ "LISTEN " <> notifyName schemaName)
-  (Simple.execute_ conn $ "UNLISTEN " <> notifyName schemaName)
+withPayload conn retryCount f = bracket_
+  (Simple.execute_ conn $ "LISTEN " <> notifyName)
+  (Simple.execute_ conn $ "UNLISTEN " <> notifyName)
   $ fix
-  $ \continue -> runDBT (withPayloadDB schemaName retryCount f) ReadCommitted conn
+  $ \continue -> runDBT (withPayloadDB retryCount f) ReadCommitted conn
   >>= \case
     Left x -> return $ Left x
     Right Nothing -> do
-      notifyPayload schemaName conn
+      notifyPayload conn
       continue
     Right (Just x) -> return $ Right x
 
 {-| Get the number of rows in the 'Enqueued' state. This function runs
     'getCountDB' in a 'ReadCommitted' transaction.
 -}
-getCount :: String -> Connection -> IO Int64
-getCount schemaName = runDBT (getCountDB schemaName) ReadCommitted
+getCount :: Connection -> IO Int64
+getCount = runDBT getCountDB ReadCommitted

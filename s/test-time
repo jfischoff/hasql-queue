@@ -1,0 +1,1 @@
+stack test 2>&1 | grep Fini

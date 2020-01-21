@@ -1,6 +1,10 @@
 # 1/21/20
 - According to the flamecharts preparing the statements takes a third of the time. Also setting the schema takes some time.
 - Going to remove the schema setting first to simplify the code. Then I'll use prepared statements.
+- The reason I need the schema is for a prefix for the notify
+- One option is to remove it and the figure out how to add it back.
+- Yeah I'm going to do that. I would like to keep things simple as I improve perf
+- I think it needs to make a record of function based on the string
 
 # 1/13/20
 - Initial benchmark setup ... not sure what else to do with it at the moment
