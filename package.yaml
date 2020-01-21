@@ -78,6 +78,7 @@ dependencies:
 - aeson
 - bytestring
 - stm
+- here
 
 library:
   source-dirs: src

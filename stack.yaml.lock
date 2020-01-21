@@ -3,52 +3,10 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages:
-- completed:
-    hackage: hspec-expectations-lifted-0.10.0@sha256:d00d16c52d67e9967418cf9301e45250fd72cec2a87770b64872b23cab038b28,789
-    pantry-tree:
-      size: 247
-      sha256: e583e3169c0cf1c2f5aef9752f4b8aee48f7a2a192206178a4b7521971ef42ff
-  original:
-    hackage: hspec-expectations-lifted-0.10.0
-- completed:
-    hackage: optparse-generic-1.2.2@sha256:b3095eeda269d9ed5dcf24e4114cf4e1f2a86c2f0c92e9c898e5974a6228fcc0,1624
-    pantry-tree:
-      size: 224
-      sha256: 03100110e2afa0c6bbdb767d4c7520c9be535cea5343f587c828d73278de2604
-  original:
-    hackage: optparse-generic-1.2.2
-- completed:
-    hackage: pg-transact-0.3.1.0@sha256:e8af8acfdfdc9c2462f61fbcc6d4d652710e88f04e08c3cc164b75a8e7bc4651,1619
-    pantry-tree:
-      size: 463
-      sha256: 2e7711962107c9dd09528cad8ce42f3f4c29090f6cc9e8de923a21c94dbc718f
-  original:
-    hackage: pg-transact-0.3.1.0
-- completed:
-    hackage: postgresql-simple-opts-0.2.0.2@sha256:f1852068a4f810614dc7b663a17098b4fc81a8dbef6ab940c368a97d40597137,1778
-    pantry-tree:
-      size: 301
-      sha256: ca260116f891910bab9090dc98f81ded30bfe7d1a9600c4b7b6528ddb7f96910
-  original:
-    hackage: postgresql-simple-opts-0.2.0.2
-- completed:
-    hackage: generic-monoid-0.1.0.0@sha256:372875d12742b97befaacbd08a35c2e73cc3821a3b7a09ec1b17a079d0b24ff7,856
-    pantry-tree:
-      size: 393
-      sha256: 97b556af7f3209f1da5099f50727008d771b72ac0b64b4a640c20f1621eb669b
-  original:
-    hackage: generic-monoid-0.1.0.0
-- completed:
-    hackage: tmp-postgres-1.34.1.0@sha256:7d6fd2e6f737890857aa60be1ba2828093c057db272e16180e99cd51566fead7,4753
-    pantry-tree:
-      size: 816
-      sha256: 328061c9ec70b240b5a247164ba049d56a7e217409cebb69ed528cc280ee3a74
-  original:
-    hackage: tmp-postgres-1.34.1.0
+packages: []
 snapshots:
 - completed:
-    size: 439010
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2019/12/22.yaml
-    sha256: 821da68dfc5803072ad7c2b23229ec90acf91c64cec75584a7c3b68d45274d65
-  original: nightly-2019-12-22
+    size: 458669
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2020/1/21.yaml
+    sha256: 3162cd7b6d9a0f8f033a1a2eebb5e5c7f353514a790938cb71690cf8c0a87a28
+  original: nightly-2020-01-21

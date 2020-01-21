@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: nightly-2019-12-22
+resolver: nightly-2020-01-21
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -41,12 +41,12 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-  - 'hspec-expectations-lifted-0.10.0'
-  - 'optparse-generic-1.2.2'
-  - 'pg-transact-0.3.1.0'
-  - 'postgresql-simple-opts-0.2.0.2'
-  - 'generic-monoid-0.1.0.0'
-  - 'tmp-postgres-1.34.1.0'
+#  - 'hspec-expectations-lifted-0.10.0'
+#  - 'optparse-generic-1.2.2'
+#  - 'pg-transact-0.3.1.0'
+#  - 'postgresql-simple-opts-0.2.0.2'
+#  - 'generic-monoid-0.1.0.0'
+#  - 'tmp-postgres-1.34.1.0'
 
 # Override default flag values for local packages and extra-deps
 flags: {}
