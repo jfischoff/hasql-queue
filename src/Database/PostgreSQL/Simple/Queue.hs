@@ -72,16 +72,9 @@ import           Data.Function
 import           Data.Int
 import           Data.Text                               (Text)
 import           Data.Time
-import           Database.PostgreSQL.Simple              (Connection, Only (..))
-import qualified Database.PostgreSQL.Simple              as Simple
-import           Database.PostgreSQL.Simple.FromField
-import           Database.PostgreSQL.Simple.FromRow
-import           Database.PostgreSQL.Simple.Notification
-import           Database.PostgreSQL.Simple.SqlQQ
-import           Database.PostgreSQL.Simple.ToField
-import           Database.PostgreSQL.Simple.ToRow
-import           Database.PostgreSQL.Simple.Transaction
-import           Database.PostgreSQL.Transact
+import           Hasql.Connection
+import           Hasql.Statement
+import           Hasql.Session
 import           Data.String
 import           Control.Monad.IO.Class
 import           Data.Maybe
@@ -90,13 +83,15 @@ import           Data.Maybe
 ---  Types
 -------------------------------------------------------------------------------
 newtype PayloadId = PayloadId { unPayloadId :: Int64 }
-  deriving (Eq, Show, FromField, ToField)
+  deriving (Eq, Show)
 
+{-
 instance FromRow PayloadId where
   fromRow = fromOnly <$> fromRow
 
 instance ToRow PayloadId where
   toRow = toRow . Only
+-}
 
 -- The fundemental record stored in the queue. The queue is a single table
 -- and each row consists of a 'Payload'
@@ -110,8 +105,10 @@ data Payload = Payload
   , pModifiedAt :: UTCTime
   } deriving (Show, Eq)
 
+{-
 instance FromRow Payload where
   fromRow = Payload <$> field <*> field <*> field <*> field <*> field <*> field
+-}
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -120,7 +117,7 @@ instance FromRow Payload where
 --   state, which is the terminal state.
 data State = Enqueued | Dequeued
   deriving (Show, Eq, Ord, Enum, Bounded)
-
+{-
 instance ToField State where
   toField = toField . \case
     Enqueued -> "enqueued" :: Text
@@ -139,7 +136,7 @@ instance FromField State where
      else
        returnError Incompatible f $
          "Expect type name to be state but it was " ++ show n
-
+-}
 -------------------------------------------------------------------------------
 ---  DB API
 -------------------------------------------------------------------------------

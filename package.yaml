@@ -73,8 +73,7 @@ dependencies:
 - text
 - monad-control
 - exceptions
-- postgresql-simple
-- pg-transact
+- hasql
 - aeson
 - bytestring
 - stm

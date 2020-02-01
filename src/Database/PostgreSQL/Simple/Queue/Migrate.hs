@@ -2,7 +2,6 @@
 {-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
 module Database.PostgreSQL.Simple.Queue.Migrate where
 import           Control.Monad
-import           Database.PostgreSQL.Simple
 import           Data.String
 import           Data.String.Here.Uninterpolated
 
