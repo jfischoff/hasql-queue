@@ -53,6 +53,8 @@ module Database.PostgreSQL.Simple.Queue
   , payloadDecoder
   , State (..)
   , Payload (..)
+  , enqueue
+  , dequeue
   -- * Session API
 {-
   , setup
@@ -72,6 +74,7 @@ module Database.PostgreSQL.Simple.Queue
 -- import           Data.String.Here.Uninterpolated
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
+import           Hasql.Connection
 import           Data.Time
 import           Data.Int
 import           Data.Aeson
@@ -169,7 +172,11 @@ payloadDecoder
   <*> D.column (D.nonNullable D.timestamptz)
   <*> D.column (D.nonNullable D.timestamptz)
 
+enqueue :: Connection -> Value -> IO PayloadId
+enqueue = undefined
 
+dequeue :: Connection -> IO Payload
+dequeue = undefined
 
 {-
 

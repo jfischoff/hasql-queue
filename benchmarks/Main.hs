@@ -11,18 +11,18 @@ import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Char8 as BSC
 import           Data.Pool
 import           Database.Postgres.Temp
-import           Database.PostgreSQL.Simple
 import           Control.Concurrent
 import           Control.Monad (replicateM, forever, void)
-
+import           Hasql.Session
+import           Hasql.Connection
 
 -- TODO need to make sure the number of producers and consumers does not go over the number of connections
 
 
-withConn :: Session -> (Connection -> IO a) -> IO a
+withConn :: DB -> (Connection -> IO a) -> IO a
 withConn db f = do
   let connStr = toConnectionString db
-  bracket (connectPostgreSQL connStr) close f
+  bracket (either (throwIO . userError . show) pure =<< acquire connStr) release f
 
 withSetup :: (Pool Connection -> IO ()) -> IO ()
 withSetup f = do
@@ -38,11 +38,8 @@ withSetup f = do
       print $ toConnectionString db
 
       f =<< createPool
-              (do
-                c <- connectPostgreSQL $ toConnectionString db
-                setup c
-                pure c
-              ) close 2 60 49
+              (either (throwIO . userError . show) pure =<< acquire (toConnectionString db)
+              ) release 2 60 49
 
 payload :: Value
 payload = toJSON 'a'
@@ -70,7 +67,7 @@ main = do
     replicateConcurrently_ totalEnqueueCount enqueueAction
     replicateConcurrently_ initialDequeueCount dequeueAction
 
-    withResource pool $ \conn -> void $ execute_ conn "VACUUM FULL ANALYZE"
+    withResource pool $ \conn -> void $ run (sql "VACUUM FULL ANALYZE") conn
 
     -- forever $ threadDelay 1000000000
 

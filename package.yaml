@@ -113,7 +113,6 @@ executables:
     source-dirs: benchmarks
     ghc-options:
       - -O2
-      - -Wall
       - -threaded
       - -rtsopts
       - -with-rtsopts=-N
