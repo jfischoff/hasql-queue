@@ -4,6 +4,8 @@ module Database.PostgreSQL.Simple.Queue.Migrate where
 import           Control.Monad
 import           Data.String
 import           Data.String.Here.Uninterpolated
+import           Hasql.Connection
+import           Hasql.Session
 
 migrationQueryString :: String
 migrationQueryString = [here|
@@ -81,5 +83,4 @@ migrationQueryString = [here|
 
 -}
 migrate :: Connection -> IO ()
-migrate conn = void $ execute_ conn $
-  fromString migrationQueryString
+migrate conn = void $ run (sql $ fromString migrationQueryString) conn

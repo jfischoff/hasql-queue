@@ -11,11 +11,8 @@ import           Data.Aeson
 import           Data.Function
 import           Data.IORef
 import           Data.List
-import           Database.PostgreSQL.Simple
-import           Database.PostgreSQL.Simple.Transaction
 import           Database.PostgreSQL.Simple.Queue
 import           Database.PostgreSQL.Simple.Queue.Migrate
-import           Database.PostgreSQL.Transact as T
 import           Test.Hspec                     (SpecWith, Spec, describe, parallel, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
 import           Control.Monad.Catch
@@ -29,6 +26,7 @@ import           Test.Hspec.Core.Spec (sequential)
 import           Crypto.Hash.SHA1 (hash)
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Char8 as BSC
+import           Hasql.Connection
 
 aroundAll :: forall a. ((a -> IO ()) -> IO ()) -> SpecWith a -> Spec
 aroundAll withFunc specWith = do
@@ -82,11 +80,11 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
 withConnection :: (Connection -> IO ()) -> Pool Connection -> IO ()
 withConnection = flip withResource
 
-withReadCommitted :: T.DB () -> Pool Connection -> IO ()
+withReadCommitted :: Session () -> Pool Connection -> IO ()
 withReadCommitted action pool = E.handle (\T.Abort -> pure ()) $ withResource pool $
   T.runDBT (T.abort action) ReadCommitted
 
-runDB :: Connection -> T.DB a -> IO a
+runDB :: Connection -> Session a -> IO a
 runDB conn action = T.runDBT action ReadCommitted conn
 
 spec :: Spec

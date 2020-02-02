@@ -31,7 +31,7 @@ In another thread or process, the consumer would drain the queue.
  'Database.PostgreSQL.Simple.Queue.Main.defaultMain', see
  'Database.PostgreSQL.Simple.Queue.Examples.EmailQueue.EmailQueue'.
 
-This modules provides two flavors of functions, a DB API and an IO API.
+This modules provides two flavors of functions, a Session API and an IO API.
 Most operations are provided in both flavors, with the exception of 'lock'.
 'lock' blocks and would not be that useful as part of a larger transaction
 since it would keep the transaction open for a potentially long time. Although
@@ -50,9 +50,11 @@ use cases.
 module Database.PostgreSQL.Simple.Queue
   ( -- * Types
     PayloadId (..)
+  , payloadDecoder
   , State (..)
   , Payload (..)
-  -- * DB API
+  -- * Session API
+{-
   , setup
   , enqueueDB
   , dequeueDB
@@ -64,10 +66,20 @@ module Database.PostgreSQL.Simple.Queue
   , dequeue
   , withPayload
   , getCount
+-}
   ) where
+
+-- import           Data.String.Here.Uninterpolated
+import qualified Hasql.Encoders as E
+import qualified Hasql.Decoders as D
+import           Data.Time
+import           Data.Int
+import           Data.Aeson
+{-
+
 import           Control.Monad
 import           Control.Monad.Catch
-import           Data.Aeson
+
 import           Data.Function
 import           Data.Int
 import           Data.Text                               (Text)
@@ -79,35 +91,22 @@ import           Data.String
 import           Control.Monad.IO.Class
 import           Data.Maybe
 
+-}
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
 newtype PayloadId = PayloadId { unPayloadId :: Int64 }
   deriving (Eq, Show)
 
-{-
-instance FromRow PayloadId where
-  fromRow = fromOnly <$> fromRow
+payloadIdDecoder :: D.Value PayloadId
+payloadIdDecoder = PayloadId <$> D.int8
 
+payloadIdRow :: D.Row PayloadId
+payloadIdRow = D.column (D.nonNullable payloadIdDecoder)
+
+{-
 instance ToRow PayloadId where
   toRow = toRow . Only
--}
-
--- The fundemental record stored in the queue. The queue is a single table
--- and each row consists of a 'Payload'
-data Payload = Payload
-  { pId         :: PayloadId
-  , pValue      :: Value
-  -- ^ The JSON value of a payload
-  , pState      :: State
-  , pAttempts   :: Int
-  , pCreatedAt  :: UTCTime
-  , pModifiedAt :: UTCTime
-  } deriving (Show, Eq)
-
-{-
-instance FromRow Payload where
-  fromRow = Payload <$> field <*> field <*> field <*> field <*> field <*> field
 -}
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
@@ -117,6 +116,16 @@ instance FromRow Payload where
 --   state, which is the terminal state.
 data State = Enqueued | Dequeued
   deriving (Show, Eq, Ord, Enum, Bounded)
+
+stateDecoder :: D.Value State
+stateDecoder = D.enum $ \txt ->
+  if txt == "enqueued" then
+    pure Enqueued
+  else if txt == "dequeued" then
+    pure Dequeued
+  else Nothing
+
+
 {-
 instance ToField State where
   toField = toField . \case
@@ -137,8 +146,36 @@ instance FromField State where
        returnError Incompatible f $
          "Expect type name to be state but it was " ++ show n
 -}
+
+-- The fundemental record stored in the queue. The queue is a single table
+-- and each row consists of a 'Payload'
+data Payload = Payload
+  { pId         :: PayloadId
+  , pValue      :: Value
+  -- ^ The JSON value of a payload
+  , pState      :: State
+  , pAttempts   :: Int
+  , pCreatedAt  :: UTCTime
+  , pModifiedAt :: UTCTime
+  } deriving (Show, Eq)
+
+payloadDecoder :: D.Row Payload
+payloadDecoder
+   =  Payload
+  <$> payloadIdRow
+  <*> D.column (D.nonNullable D.jsonb)
+  <*> D.column (D.nonNullable stateDecoder)
+  <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
+  <*> D.column (D.nonNullable D.timestamptz)
+  <*> D.column (D.nonNullable D.timestamptz)
+
+
+
+{-
+
+
 -------------------------------------------------------------------------------
----  DB API
+---  Session API
 -------------------------------------------------------------------------------
 notifyName :: IsString s => s
 notifyName = fromString "postgresql_simple_enqueue"
@@ -146,13 +183,9 @@ notifyName = fromString "postgresql_simple_enqueue"
 {-|
 Prepare all the statements.
 -}
-setupDB :: DB ()
-setupDB = void $ execute_
-  [sql|
-  PREPARE enqueue (int, jsonb) AS
-    INSERT INTO payloads (attempts, value)
-    VALUES ($1, $2)
-    RETURNING id;
+setupDB :: Session ()
+setupDB = sql
+  [here|
 
   PREPARE dequeue AS
     UPDATE payloads
@@ -195,18 +228,30 @@ setupDB = void $ execute_
          'enqueueDB' $ makeVerificationEmail userRecord
  @
 -}
-enqueueDB :: Value -> DB PayloadId
+enqueueDB :: Value -> Session PayloadId
 enqueueDB value = enqueueWithDB value 0
 
-enqueueWithDB :: Value -> Int -> DB PayloadId
-enqueueWithDB value attempts =
-  fmap head $ query "NOTIFY postgresql_simple_enqueue; EXECUTE enqueue(?, ?)" (attempts, value)
+enqueueWithDB :: Value -> Int -> Session PayloadId
+enqueueWithDB value attempts = do
+  let theQuery = [here|
+        INSERT INTO payloads (attempts, value)
+        VALUES ($1, $2)
+        RETURNING id
+        |]
+      theStatement = Statement
+      encoder =
+        (fst >$< param (nonNullable jsonb)) <>
+        (snd >$< param (nonNullable int4))
+      decoder = singleRow (column (nonNullable int8))
 
-retryDB :: Value -> Int -> DB PayloadId
+  sql "NOTIFY postgresql_simple_enqueue"
+  statement (value, attempts) theStatement
+
+retryDB :: Value -> Int -> Session PayloadId
 retryDB value attempts = enqueueWithDB value $ attempts + 1
 
 -- | Transition a 'Payload' to the 'Dequeued' state.
-dequeueDB :: DB (Maybe Payload)
+dequeueDB :: Session (Maybe Payload)
 dequeueDB = fmap listToMaybe $ query_ "EXECUTE dequeue"
 
 {-|
@@ -221,7 +266,7 @@ withPayloadDB :: Int
               -- ^ retry count
               -> (Payload -> IO a)
               -- ^ payload processing function
-              -> DB (Either SomeException (Maybe a))
+              -> Session (Either SomeException (Maybe a))
 withPayloadDB retryCount f
   = query_ "EXECUTE get_enqueue"
  >>= \case
@@ -243,7 +288,7 @@ withPayloadDB retryCount f
         ++ show xs
 
 -- | Get the number of rows in the 'Enqueued' state.
-getCountDB :: DB Int64
+getCountDB :: Session Int64
 getCountDB = fmap (fromOnly . head) $ query_ "EXECUTE get_count"
 -------------------------------------------------------------------------------
 ---  IO API
@@ -293,7 +338,7 @@ dequeue conn = bracket_
 
 {-| Return the oldest 'Payload' in the 'Enqueued' state or block until a
     payload arrives. This function utilizes PostgreSQL's LISTEN and NOTIFY
-    functionality to avoid excessively polling of the DB while
+    functionality to avoid excessively polling of the Session while
     waiting for new payloads, without scarficing promptness.
 -}
 withPayload :: Connection
@@ -318,3 +363,4 @@ withPayload conn retryCount f = bracket_
 -}
 getCount :: Connection -> IO Int64
 getCount = runDBT getCountDB ReadCommitted
+-}
