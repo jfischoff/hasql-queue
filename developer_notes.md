@@ -1,3 +1,6 @@
+# 2/2/20
+- Not sure why stack is not working
+
 # 1/21/20
 - According to the flamecharts preparing the statements takes a third of the time. Also setting the schema takes some time.
 - Going to remove the schema setting first to simplify the code. Then I'll use prepared statements.

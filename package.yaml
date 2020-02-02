@@ -1,4 +1,4 @@
-name: postgresql-simple-queue
+name: hasql-queue
 version: '1.0.1'
 synopsis: A PostgreSQL backed queue
 description: ! 'This module utilize PostgreSQL to implement a durable queue for efficently
@@ -97,7 +97,7 @@ tests:
     dependencies:
     - base64-bytestring
     - cryptohash-sha1
-    - postgresql-simple-queue
+    - hasql-queue
     - hspec
     - hspec-core
     - hspec-discover
@@ -119,7 +119,7 @@ executables:
     dependencies:
       - base64-bytestring
       - cryptohash-sha1
-      - postgresql-simple-queue
+      - hasql-queue
       - async
       - tmp-postgres
       - resource-pool
