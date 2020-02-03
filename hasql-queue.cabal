@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: f0fd158afc27cf24c560d925a409534c3ce59f4225486b75c67ae3a479d11db3
+-- hash: c253275a75c8343ca619877c4f83eb20cba6b41a74ae5d7674f5bf16cb4db374
 
 name:           hasql-queue
 version:        1.0.1
@@ -60,7 +60,7 @@ library
   hs-source-dirs:
       src
   default-extensions: OverloadedStrings
-  ghc-options: -Wall -Wno-unused-do-bind
+  ghc-options: -Wno-unused-do-bind
   build-depends:
       aeson
     , base >=4.7 && <5
@@ -83,7 +83,7 @@ executable benchmark
   hs-source-dirs:
       benchmarks
   default-extensions: OverloadedStrings
-  ghc-options: -Wall -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
     , async
@@ -114,7 +114,7 @@ test-suite unit-tests
   hs-source-dirs:
       test
   default-extensions: OverloadedStrings
-  ghc-options: -Wall -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
     , async

@@ -71,13 +71,18 @@ module Database.PostgreSQL.Simple.Queue
 -}
   ) where
 
--- import           Data.String.Here.Uninterpolated
+import           Data.String.Here.Uninterpolated
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Hasql.Connection
+import           Hasql.Statement
+import           Hasql.Session
 import           Data.Time
 import           Data.Int
 import           Data.Aeson
+import           Data.Functor.Contravariant
+import           Control.Exception
+
 {-
 
 import           Control.Monad
@@ -88,8 +93,7 @@ import           Data.Int
 import           Data.Text                               (Text)
 import           Data.Time
 import           Hasql.Connection
-import           Hasql.Statement
-import           Hasql.Session
+
 import           Data.String
 import           Control.Monad.IO.Class
 import           Data.Maybe
@@ -100,6 +104,11 @@ import           Data.Maybe
 -------------------------------------------------------------------------------
 newtype PayloadId = PayloadId { unPayloadId :: Int64 }
   deriving (Eq, Show)
+
+{-
+payloadIdEncoder :: E.Value PayloadId
+payloadIdEncoder = PayloadId >$< E.int8
+-}
 
 payloadIdDecoder :: D.Value PayloadId
 payloadIdDecoder = PayloadId <$> D.int8
@@ -173,7 +182,52 @@ payloadDecoder
   <*> D.column (D.nonNullable D.timestamptz)
 
 enqueue :: Connection -> Value -> IO PayloadId
-enqueue = undefined
+enqueue conn val = either (throwIO . userError . show) pure =<< run (enqueueDB val) conn
+
+enqueueDB :: Value -> Session PayloadId
+enqueueDB value = enqueueWithDB value 0
+
+enqueueWithDB :: Value -> Int -> Session PayloadId
+enqueueWithDB value attempts = do
+  let theQuery = [here|
+        INSERT INTO payloads (attempts, value)
+        VALUES ($1, $2)
+        RETURNING id
+        |]
+      theStatement = Statement theQuery encoder decoder True
+      encoder =
+        (fst >$< E.param (E.nonNullable E.jsonb)) <>
+        (snd >$< E.param (E.nonNullable $ fromIntegral >$< E.int4))
+      decoder = D.singleRow (D.column (D.nonNullable payloadIdDecoder))
+
+  sql "NOTIFY postgresql_simple_enqueue"
+  statement (value, attempts) theStatement
+
+retryDB :: Value -> Int -> Session PayloadId
+retryDB value attempts = enqueueWithDB value $ attempts + 1
+
+dequeueDB :: Session (Maybe Payload)
+dequeueDB = do
+  let theQuery = [here|
+        UPDATE payloads
+        SET state='dequeued'
+        WHERE id in
+          ( SELECT p1.id
+            FROM payloads AS p1
+            WHERE p1.state='enqueued'
+            ORDER BY p1.modified_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+        RETURNING id, value, state, attempts, created_at, modified_at
+        |]
+      encoder = mempty
+      decoder = D.rowMaybe payloadDecoder
+      theStatement = Statement theQuery encoder decoder True
+  statement () theStatement
+
+tryDequeue :: Connection -> IO (Maybe Payload)
+tryDequeue conn = either (throwIO . userError . show) pure =<< run dequeueDB conn
 
 dequeue :: Connection -> IO Payload
 dequeue = undefined
@@ -235,31 +289,12 @@ setupDB = sql
          'enqueueDB' $ makeVerificationEmail userRecord
  @
 -}
-enqueueDB :: Value -> Session PayloadId
-enqueueDB value = enqueueWithDB value 0
 
-enqueueWithDB :: Value -> Int -> Session PayloadId
-enqueueWithDB value attempts = do
-  let theQuery = [here|
-        INSERT INTO payloads (attempts, value)
-        VALUES ($1, $2)
-        RETURNING id
-        |]
-      theStatement = Statement
-      encoder =
-        (fst >$< param (nonNullable jsonb)) <>
-        (snd >$< param (nonNullable int4))
-      decoder = singleRow (column (nonNullable int8))
 
-  sql "NOTIFY postgresql_simple_enqueue"
-  statement (value, attempts) theStatement
 
-retryDB :: Value -> Int -> Session PayloadId
-retryDB value attempts = enqueueWithDB value $ attempts + 1
 
 -- | Transition a 'Payload' to the 'Dequeued' state.
-dequeueDB :: Session (Maybe Payload)
-dequeueDB = fmap listToMaybe $ query_ "EXECUTE dequeue"
+
 
 {-|
 

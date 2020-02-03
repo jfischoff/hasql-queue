@@ -59,7 +59,6 @@ github: jfischoff/postgresql-queue
 extra-source-files:
 - README.md
 ghc-options:
-- -Wall
 - -Wno-unused-do-bind
 
 default-extensions:
