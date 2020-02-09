@@ -126,21 +126,24 @@ spec = describe "Database.Queue" $ parallel $ do
 
       theCount' `shouldBe` 0
 
-{-
-    it "enqueuesDB/withPayloadDB/retries" $ withReadCommitted $ do
-      void $ enqueueDB $ String "Hello"
-      getCountDB `shouldReturn` 1
 
-      xs <- replicateM 7 $ withPayloadDB 8 (\(Payload {..}) ->
-          throwM $ userError "not enough tries"
-        )
+    it "enqueuesDB/withPayloadDB/retries" $ \pool -> do
+      (theCount, xs) <- runReadCommitted pool $ do
+        void $ enqueueDB $ String "Hello"
+        theCount <- getCountDB
 
+        fmap (theCount,) $ replicateM 7 $ withPayloadDB 8 (\(Payload {..}) ->
+            throwM $ userError "not enough tries"
+          )
+
+      theCount `shouldBe` 1
       all isLeft xs `shouldBe` True
 
-      either throwM (const $ pure ()) =<< withPayloadDB 8 (\(Payload {..}) -> do
+      either throwM (const $ pure ()) <=< runReadCommitted pool $ withPayloadDB 8 (\(Payload {..}) -> do
         pAttempts `shouldBe` 7
         pValue `shouldBe` String "Hello"
         )
+{-
     it "enqueuesDB/withPayloadDB/timesout" $ withReadCommitted $  do
       void $ enqueueDB $ String "Hello"
       getCountDB `shouldReturn` 1

@@ -323,7 +323,12 @@ setDequeued thePid = statement thePid $ state (E.param (E.nonNullable payloadIdE
   |]
 
 setEnqueueWithCount :: PayloadId -> Int -> Session ()
-setEnqueueWithCount = undefined
+setEnqueueWithCount thePid retries = do
+  let encoder = (fst >$< E.param (E.nonNullable payloadIdEncoder)) <>
+                (snd >$< E.param (E.nonNullable E.int4))
+  statement (thePid, fromIntegral retries) $ state encoder D.noResult [here|
+    UPDATE payloads SET state='enqueued', attempts=$2 WHERE id = $1
+  |]
 
 -- todo make a failed state
 withPayloadDB :: forall a.
