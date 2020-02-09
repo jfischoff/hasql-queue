@@ -3,7 +3,21 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    size: 8481
+    url: https://github.com/jfischoff/hasql-notifications/archive/eea922d247e3fcd90a7b2554710a0bd41de1744d.tar.gz
+    cabal-file:
+      size: 1580
+      sha256: 6f7ae5e18eaf61393a402d4de8c02819bc17e3d4c1587f7e00742cead227cd4b
+    name: hasql-notifications
+    version: 0.1.0.0
+    sha256: 80d376f1a147ce65a74cf0a8ee23adb102867e2d7b3d5a4102385c594cfd9e49
+    pantry-tree:
+      size: 659
+      sha256: cddd6af9aafc77046d21afb94e1d7bd9acc0fc9a4b4787cc7a424b1a7a24a53c
+  original:
+    url: https://github.com/jfischoff/hasql-notifications/archive/eea922d247e3fcd90a7b2554710a0bd41de1744d.tar.gz
 snapshots:
 - completed:
     size: 458669

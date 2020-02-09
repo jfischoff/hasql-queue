@@ -55,19 +55,24 @@ module Database.PostgreSQL.Simple.Queue
   , Payload (..)
   , enqueue
   , dequeue
+  , enqueueDB
+  , dequeueDB
+  , execute
+  , getCount
+  , getCountDB
+  , withPayloadDB
   -- * Session API
 {-
   , setup
-  , enqueueDB
-  , dequeueDB
-  , withPayloadDB
-  , getCountDB
+
+
+
   -- * IO API
   , enqueue
   , tryDequeue
   , dequeue
   , withPayload
-  , getCount
+
 -}
   ) where
 
@@ -82,6 +87,19 @@ import           Data.Int
 import           Data.Aeson
 import           Data.Functor.Contravariant
 import           Control.Exception
+import           Hasql.Notification
+import           Data.String
+import           Control.Monad (unless)
+import           Data.ByteString (ByteString)
+import           Data.Function
+import           Data.Bitraversable
+import           Data.Traversable
+import           Data.Bifunctor
+import           Control.Monad.IO.Class
+import           Control.Monad ((<=<))
+import           Control.Monad.Trans.Class
+import           Control.Monad.Trans.Maybe
+import           Control.Monad.Trans.Except
 
 {-
 
@@ -94,8 +112,8 @@ import           Data.Text                               (Text)
 import           Data.Time
 import           Hasql.Connection
 
-import           Data.String
-import           Control.Monad.IO.Class
+x
+
 import           Data.Maybe
 
 -}
@@ -105,10 +123,9 @@ import           Data.Maybe
 newtype PayloadId = PayloadId { unPayloadId :: Int64 }
   deriving (Eq, Show)
 
-{-
+
 payloadIdEncoder :: E.Value PayloadId
-payloadIdEncoder = PayloadId >$< E.int8
--}
+payloadIdEncoder = unPayloadId >$< E.int8
 
 payloadIdDecoder :: D.Value PayloadId
 payloadIdDecoder = PayloadId <$> D.int8
@@ -181,8 +198,12 @@ payloadDecoder
   <*> D.column (D.nonNullable D.timestamptz)
   <*> D.column (D.nonNullable D.timestamptz)
 
+{-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
+    which can be composed with other queries in a single transaction.
+-}
 enqueue :: Connection -> Value -> IO PayloadId
 enqueue conn val = either (throwIO . userError . show) pure =<< run (enqueueDB val) conn
+
 
 enqueueDB :: Value -> Session PayloadId
 enqueueDB value = enqueueWithDB value 0
@@ -196,12 +217,12 @@ enqueueWithDB value attempts = do
         |]
       theStatement = Statement theQuery encoder decoder True
       encoder =
-        (fst >$< E.param (E.nonNullable E.jsonb)) <>
-        (snd >$< E.param (E.nonNullable $ fromIntegral >$< E.int4))
+        (fst >$< E.param (E.nonNullable $ fromIntegral >$< E.int4)) <>
+        (snd >$< E.param (E.nonNullable E.jsonb))
       decoder = D.singleRow (D.column (D.nonNullable payloadIdDecoder))
 
   sql "NOTIFY postgresql_simple_enqueue"
-  statement (value, attempts) theStatement
+  statement (attempts, value) theStatement
 
 retryDB :: Value -> Int -> Session PayloadId
 retryDB value attempts = enqueueWithDB value $ attempts + 1
@@ -226,11 +247,99 @@ dequeueDB = do
       theStatement = Statement theQuery encoder decoder True
   statement () theStatement
 
+{-| Return a the oldest 'Payload' in the 'Enqueued' state or 'Nothing'
+    if there are no payloads. For a blocking version utilizing PostgreSQL's
+    NOTIFY and LISTEN, see 'dequeue'. This functions runs 'dequeueDb' as a
+    'ReadCommitted' transaction.
+
+  See `withPayload' for an alternative interface that will automatically return
+  the payload to the 'Enqueued' state if an exception occurs.
+-}
 tryDequeue :: Connection -> IO (Maybe Payload)
 tryDequeue conn = either (throwIO . userError . show) pure =<< run dequeueDB conn
 
+notifyName :: IsString s => s
+notifyName = fromString "postgresql_simple_enqueue"
+
+-- Block until a payload notification is fired. Fired during insertion.
+notifyPayload :: Connection -> IO ()
+notifyPayload conn = do
+  Notification {..} <- either throwIO pure =<< getNotification conn
+  unless (notificationChannel == notifyName) $ notifyPayload conn
+
+execute :: Connection -> ByteString -> IO ()
+execute conn theSql = either (throwIO . userError . show) pure =<< run (sql theSql) conn
+
+-- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
+--   'dequeueDB' as a 'Serializable' transaction.
 dequeue :: Connection -> IO Payload
-dequeue = undefined
+dequeue conn = bracket_
+  (execute conn $ "LISTEN " <> notifyName)
+  (execute conn $ "UNLISTEN " <> notifyName)
+  $ fix $ \continue -> do
+      m <- tryDequeue conn
+      case m of
+        Nothing -> do
+          notifyPayload conn
+          continue
+        Just x -> return x
+
+
+{-| Get the number of rows in the 'Enqueued' state. This function runs
+    'getCountDB' in a 'ReadCommitted' transaction.
+-}
+getCount :: Connection -> IO Int64
+getCount conn = either (throwIO . userError . show) pure =<< run getCountDB conn
+
+state enc dec theSql = Statement theSql enc dec True
+
+-- | Get the number of rows in the 'Enqueued' state.
+getCountDB :: Session Int64
+getCountDB = do
+
+  let decoder = D.singleRow (D.column (D.nonNullable D.int8))
+      theSql = [here|
+            SELECT count(*)
+            FROM payloads
+            WHERE state='enqueued';
+        |]
+      theStatement = Statement theSql mempty decoder True
+  statement () theStatement
+
+getEnqueue :: Session (Maybe Payload)
+getEnqueue = statement () $ state mempty (D.rowMaybe payloadDecoder) [here|
+    SELECT id, value, state, attempts, created_at, modified_at
+    FROM payloads
+    WHERE state='enqueued'
+    ORDER BY modified_at ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT 1;
+  |]
+
+
+setDequeued :: PayloadId -> Session ()
+setDequeued thePid = statement thePid $ state (E.param (E.nonNullable payloadIdEncoder)) D.noResult [here|
+    UPDATE payloads SET state='dequeued' WHERE id = $1
+  |]
+
+setEnqueueWithCount :: PayloadId -> Int -> Session ()
+setEnqueueWithCount = undefined
+
+-- todo make a failed state
+withPayloadDB :: forall a.
+                 Int
+              -- ^ retry count
+              -> (Payload -> IO a)
+              -- ^ payload processing function
+              -> Session (Either SomeException (Maybe a))
+withPayloadDB retryCount f = getEnqueue >>= \case
+  Nothing -> pure (Right Nothing)
+  Just payload@Payload {..} -> fmap Just <$> do
+    setDequeued pId
+
+    bisequenceA
+      .   bimap (\e -> setEnqueueWithCount pId (pAttempts + 1) >> return e) pure
+      =<< liftIO (try $ f payload)
 
 {-
 
@@ -238,8 +347,7 @@ dequeue = undefined
 -------------------------------------------------------------------------------
 ---  Session API
 -------------------------------------------------------------------------------
-notifyName :: IsString s => s
-notifyName = fromString "postgresql_simple_enqueue"
+
 
 {-|
 Prepare all the statements.
@@ -248,34 +356,15 @@ setupDB :: Session ()
 setupDB = sql
   [here|
 
-  PREPARE dequeue AS
-    UPDATE payloads
-    SET state='dequeued'
-    WHERE id in
-      ( SELECT p1.id
-        FROM payloads AS p1
-        WHERE p1.state='enqueued'
-        ORDER BY p1.modified_at ASC
-        FOR UPDATE SKIP LOCKED
-        LIMIT 1
-      )
-    RETURNING id, value, state, attempts, created_at, modified_at;
 
   PREPARE get_enqueue AS
-    SELECT id, value, state, attempts, created_at, modified_at
-    FROM payloads
-    WHERE state='enqueued'
-    ORDER BY modified_at ASC
-    FOR UPDATE SKIP LOCKED
-    LIMIT 1;
+
 
   PREPARE update_state (int8) AS
-    UPDATE payloads SET state='dequeued' WHERE id = $1;
+
 
   PREPARE get_count AS
-    SELECT count(*)
-    FROM payloads
-    WHERE state='enqueued';
+
   |]
 
 {-| Enqueue a new JSON value into the queue. This particularly function
@@ -304,79 +393,16 @@ maximum. Return `Nothing` is the `payloads` table is empty otherwise the result 
 from the payload ingesting function.
 
 -}
-withPayloadDB :: Int
-              -- ^ retry count
-              -> (Payload -> IO a)
-              -- ^ payload processing function
-              -> Session (Either SomeException (Maybe a))
-withPayloadDB retryCount f
-  = query_ "EXECUTE get_enqueue"
- >>= \case
-    [] -> return $ return Nothing
-    [payload@Payload {..}] -> do
-      execute "EXECUTE update_state(?)" pId
 
-      -- Retry on failure up to retryCount
-      handle (\e -> when (pAttempts < retryCount)
-                         (void $ retryDB pValue pAttempts)
-                 >> return (Left e)
-             )
-             $ Right . Just <$> liftIO (f payload)
-    xs -> return
-        $ Left
-        $ toException
-        $ userError
-        $ "LIMIT is 1 but got more than one row: "
-        ++ show xs
 
--- | Get the number of rows in the 'Enqueued' state.
-getCountDB :: Session Int64
-getCountDB = fmap (fromOnly . head) $ query_ "EXECUTE get_count"
+
 -------------------------------------------------------------------------------
 ---  IO API
 -------------------------------------------------------------------------------
-{-|
-Prepare all the statements.
--}
-setup :: Connection -> IO ()
-setup conn = runDBT setupDB ReadCommitted conn
 
-{-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
-    which can be composed with other queries in a single transaction.
--}
-enqueue :: Connection -> Value -> IO PayloadId
-enqueue conn value = runDBT (enqueueDB value) ReadCommitted conn
 
--- Block until a payload notification is fired. Fired during insertion.
-notifyPayload :: Connection -> IO ()
-notifyPayload conn = do
-  Notification {..} <- getNotification conn
-  unless (notificationChannel == notifyName) $ notifyPayload conn
 
-{-| Return a the oldest 'Payload' in the 'Enqueued' state or 'Nothing'
-    if there are no payloads. For a blocking version utilizing PostgreSQL's
-    NOTIFY and LISTEN, see 'dequeue'. This functions runs 'dequeueDb' as a
-    'ReadCommitted' transaction.
 
-  See `withPayload' for an alternative interface that will automatically return
-  the payload to the 'Enqueued' state if an exception occurs.
--}
-tryDequeue :: Connection -> IO (Maybe Payload)
-tryDequeue conn = runDBT dequeueDB ReadCommitted conn
-
--- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
---   'dequeueDB' as a 'Serializable' transaction.
-dequeue :: Connection -> IO Payload
-dequeue conn = bracket_
-  (Simple.execute_ conn $ "LISTEN " <> notifyName)
-  (Simple.execute_ conn $ "UNLISTEN " <> notifyName)
-  $ fix $ \continue -> do
-      m <- tryDequeue conn
-      case m of
-        Nothing -> do
-          notifyPayload conn
-          continue
-        Just x -> return x
 
 {-| Return the oldest 'Payload' in the 'Enqueued' state or block until a
     payload arrives. This function utilizes PostgreSQL's LISTEN and NOTIFY
@@ -400,9 +426,5 @@ withPayload conn retryCount f = bracket_
       continue
     Right (Just x) -> return $ Right x
 
-{-| Get the number of rows in the 'Enqueued' state. This function runs
-    'getCountDB' in a 'ReadCommitted' transaction.
--}
-getCount :: Connection -> IO Int64
-getCount = runDBT getCountDB ReadCommitted
+
 -}

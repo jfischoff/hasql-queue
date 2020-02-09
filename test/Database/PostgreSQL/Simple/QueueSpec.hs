@@ -27,9 +27,8 @@ import           Crypto.Hash.SHA1 (hash)
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Char8 as BSC
 import           Hasql.Connection
-
-spec :: Spec
-spec = pure ()
+import           Hasql.Session
+import           Data.Typeable
 
 aroundAll :: forall a. ((a -> IO ()) -> IO ()) -> SpecWith a -> Spec
 aroundAll withFunc specWith = do
@@ -54,11 +53,11 @@ aroundAll withFunc specWith = do
         traverse_ cancel =<< readIORef asyncer
 
   beforeAll theStart $ afterAll theStop $ specWith
-{-
+
 withConn :: Temp.DB -> (Connection -> IO a) -> IO a
 withConn db f = do
   let connStr = toConnectionString db
-  E.bracket (connectPostgreSQL connStr) close f
+  E.bracket (either (throwIO . userError . show) pure =<< acquire connStr) release f
 
 withSetup :: (Pool Connection -> IO ()) -> IO ()
 withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
@@ -70,25 +69,32 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
         (verboseConfig <> cacheConfig dbCache)
   withConfig migratedConfig $ \db -> do
     f =<< createPool
-      (do
-        c <- connectPostgreSQL $ toConnectionString db
-        setup c
-        pure c
-      )
-      close
+      (either (throwIO . userError . show) pure =<< acquire (toConnectionString db))
+      release
       2
       60
       50
 
+data Abort = Abort
+  deriving (Show, Eq, Typeable)
+
+instance Exception Abort
+
 withConnection :: (Connection -> IO ()) -> Pool Connection -> IO ()
 withConnection = flip withResource
 
-withReadCommitted :: Session () -> Pool Connection -> IO ()
-withReadCommitted action pool = E.handle (\T.Abort -> pure ()) $ withResource pool $
-  T.runDBT (T.abort action) ReadCommitted
+runReadCommitted :: Pool Connection -> Session a -> IO a
+runReadCommitted = flip withReadCommitted
 
-runDB :: Connection -> Session a -> IO a
-runDB conn action = T.runDBT action ReadCommitted conn
+withReadCommitted :: Session a -> Pool Connection -> IO a
+withReadCommitted action pool = do
+  let wrappedAction = do
+        sql "BEGIN"
+        r <- action
+        sql "ROLLBACK"
+        pure r
+  withResource pool $ \conn ->
+    either (throwIO . userError . show) pure =<< run wrappedAction conn
 
 spec :: Spec
 spec = describe "Database.Queue" $ parallel $ do
@@ -96,22 +102,31 @@ spec = describe "Database.Queue" $ parallel $ do
     it "is okay to migrate multiple times" $ withConnection $
       liftIO . migrate
 
-    it "empty locks nothing" $ withReadCommitted $
-      (either throwM return =<< (withPayloadDB 8 return))
-        `shouldReturn` Nothing
-    it "empty gives count 0" $ withReadCommitted $
-      getCountDB `shouldReturn` 0
-    it "enqueuesDB/withPayloadDB" $ withReadCommitted $ do
-        payloadId <- enqueueDB $ String "Hello"
-        getCountDB `shouldReturn` 1
+    it "empty locks nothing" $ \pool -> do
+      runReadCommitted pool (withPayloadDB 8 return) >>= \case
+        Left err -> fail $ show err
+        Right x -> x `shouldBe` Nothing
+    it "empty gives count 0" $ \pool ->
+      runReadCommitted pool getCountDB `shouldReturn` 0
 
-        either throwM return =<< withPayloadDB 8 (\(Payload {..}) -> do
+    it "enqueuesDB/withPayloadDB" $ \pool -> do
+      (payloadId, theCount) <- runReadCommitted pool $ do
+        payloadId <- enqueueDB $ String "Hello"
+        (payloadId,) <$> getCountDB
+      theCount `shouldBe` 1
+
+      theCount' <- runReadCommitted pool $ do
+        -- TODO assert that this returns a right
+        withPayloadDB 8 (\(Payload {..}) -> do
           pId `shouldBe` payloadId
           pValue `shouldBe` String "Hello"
           )
 
-        getCountDB `shouldReturn` 0
+        getCountDB
 
+      theCount' `shouldBe` 0
+
+{-
     it "enqueuesDB/withPayloadDB/retries" $ withReadCommitted $ do
       void $ enqueueDB $ String "Hello"
       getCountDB `shouldReturn` 1

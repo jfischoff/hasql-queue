@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c253275a75c8343ca619877c4f83eb20cba6b41a74ae5d7674f5bf16cb4db374
+-- hash: aaaafb81ee97a387aa499fdf318fc209ba7d8779c93c80cbae189643d45b60b2
 
 name:           hasql-queue
 version:        1.0.1
@@ -59,7 +59,7 @@ library
       Paths_hasql_queue
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections
   ghc-options: -Wno-unused-do-bind
   build-depends:
       aeson
@@ -67,6 +67,7 @@ library
     , bytestring
     , exceptions
     , hasql
+    , hasql-notifications
     , here
     , monad-control
     , random
@@ -82,8 +83,8 @@ executable benchmark
       Paths_hasql_queue
   hs-source-dirs:
       benchmarks
-  default-extensions: OverloadedStrings
-  ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections
+  ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N -g2
   build-depends:
       aeson
     , async
@@ -93,6 +94,7 @@ executable benchmark
     , cryptohash-sha1
     , exceptions
     , hasql
+    , hasql-notifications
     , hasql-queue
     , here
     , monad-control
@@ -113,7 +115,7 @@ test-suite unit-tests
       Paths_hasql_queue
   hs-source-dirs:
       test
-  default-extensions: OverloadedStrings
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections
   ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -124,6 +126,7 @@ test-suite unit-tests
     , cryptohash-sha1
     , exceptions
     , hasql
+    , hasql-notifications
     , hasql-queue
     , here
     , hspec

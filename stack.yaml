@@ -38,10 +38,12 @@ resolver: nightly-2020-01-21
 packages:
 - '.'
 
+
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-
+- github: jfischoff/hasql-notifications
+  commit: eea922d247e3fcd90a7b2554710a0bd41de1744d
 # Override default flag values for local packages and extra-deps
 flags: {}
 

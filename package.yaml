@@ -63,6 +63,9 @@ ghc-options:
 
 default-extensions:
 - OverloadedStrings
+- LambdaCase
+- RecordWildCards
+- TupleSections
 
 dependencies:
 - base >=4.7 && <5
@@ -73,6 +76,7 @@ dependencies:
 - monad-control
 - exceptions
 - hasql
+- hasql-notifications
 - aeson
 - bytestring
 - stm
@@ -115,6 +119,7 @@ executables:
       - -threaded
       - -rtsopts
       - -with-rtsopts=-N
+      - -g2
     dependencies:
       - base64-bytestring
       - cryptohash-sha1
