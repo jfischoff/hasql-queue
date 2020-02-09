@@ -143,19 +143,21 @@ spec = describe "Database.Queue" $ parallel $ do
         pAttempts `shouldBe` 7
         pValue `shouldBe` String "Hello"
         )
-{-
-    it "enqueuesDB/withPayloadDB/timesout" $ withReadCommitted $  do
-      void $ enqueueDB $ String "Hello"
-      getCountDB `shouldReturn` 1
 
-      xs <- replicateM 2 $ withPayloadDB 1 (\(Payload {..}) ->
-          throwM $ userError "not enough tries"
-        )
+    it "enqueuesDB/withPayloadDB/timesout" $ \pool -> do
+      (theCount, xs) <- runReadCommitted pool $ do
+        void $ enqueueDB $ String "Hello"
+        theCount <- getCountDB
 
+        fmap (theCount,) $ replicateM 2 $ withPayloadDB 1 (\(Payload {..}) ->
+            throwM $ userError "not enough tries"
+          )
+
+      theCount `shouldBe` 1
       all isLeft xs `shouldBe` True
 
-      getCountDB `shouldReturn` 0
-
+      runReadCommitted pool getCountDB `shouldReturn` 0
+{-
     it "selects the oldest first" $ withReadCommitted $ do
       payloadId0 <- enqueueDB $ String "Hello"
       liftIO $ threadDelay 100
