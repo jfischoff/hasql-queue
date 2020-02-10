@@ -173,7 +173,7 @@ payloadDecoder
     which can be composed with other queries in a single transaction.
 -}
 enqueue :: Connection -> Value -> IO PayloadId
-enqueue conn val = either (throwIO . userError . show) pure =<< run (enqueueDB val) conn
+enqueue conn val = either (throwIO . userError . show) pure =<< run (transaction $ enqueueDB val) conn
 
 enqueueDB :: Value -> Session PayloadId
 enqueueDB value = enqueueWithDB value 0
@@ -193,9 +193,6 @@ enqueueWithDB value attempts = do
 
   sql "NOTIFY postgresql_simple_enqueue"
   statement (attempts, value) theStatement
-
-retryDB :: Value -> Int -> Session PayloadId
-retryDB value attempts = enqueueWithDB value $ attempts + 1
 
 dequeueDB :: Session (Maybe Payload)
 dequeueDB = do
@@ -226,7 +223,7 @@ dequeueDB = do
   the payload to the 'Enqueued' state if an exception occurs.
 -}
 tryDequeue :: Connection -> IO (Maybe Payload)
-tryDequeue conn = either (throwIO . userError . show) pure =<< run dequeueDB conn
+tryDequeue conn = either (throwIO . userError . show) pure =<< run (transaction dequeueDB) conn
 
 notifyName :: IsString s => s
 notifyName = fromString "postgresql_simple_enqueue"
