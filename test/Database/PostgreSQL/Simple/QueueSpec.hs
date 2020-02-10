@@ -192,7 +192,7 @@ spec = describe "Database.Queue" $ parallel $ do
         Right _ -> pure ()
 
       secondCount `shouldBe` 0
-{-
+
     it "enqueues and dequeues concurrently withPayload" $ \testDB -> do
       let withPool' = flip withConnection testDB
           elementCount = 1000 :: Int
@@ -201,7 +201,7 @@ spec = describe "Database.Queue" $ parallel $ do
       ref <- newTVarIO []
 
       loopThreads <- replicateM 35 $ async $ withPool' $ \c -> fix $ \next -> do
-        lastCount <- either throwM return <=< withPayload c 0 $ \(Payload {..}) -> do
+        lastCount <- either throwM return <=< withPayload c 1 $ \(Payload {..}) -> do
           atomically $ do
             xs <- readTVar ref
             writeTVar ref $ pValue : xs
@@ -216,7 +216,7 @@ spec = describe "Database.Queue" $ parallel $ do
       xs <- atomically $ readTVar ref
       let Just decoded = mapM (decode . encode) xs
       sort decoded `shouldBe` sort expected
-
+{-
   aroundAll withSetup $ describe "basic" $ do
     it "enqueues and dequeues concurrently dequeue" $ \testDB -> do
       let withPool' = flip withConnection testDB

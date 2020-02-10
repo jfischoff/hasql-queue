@@ -61,6 +61,7 @@ module Database.PostgreSQL.Simple.Queue
   , getCount
   , getCountDB
   , withPayloadDB
+  , withPayload
   -- * Session API
 {-
   , setup
@@ -71,7 +72,7 @@ module Database.PostgreSQL.Simple.Queue
   , enqueue
   , tryDequeue
   , dequeue
-  , withPayload
+
 
 -}
   ) where
@@ -333,6 +334,13 @@ withPayloadDB retryCount f = getEnqueue >>= \case
     waiting for new payloads, without scarficing promptness.
 -}
 
+transaction :: Session a -> Session a
+transaction inner = do
+  sql "BEGIN"
+  r <- inner
+  sql "COMMIT"
+  pure r
+
 joinLeft :: Either a (Either a b) -> Either a b
 joinLeft = \case
   Left x -> Left x
@@ -350,7 +358,7 @@ withPayload conn retryCount f = bracket_
   (execute conn $ "UNLISTEN " <> notifyName)
   $ fix
   $ \continue ->
-    run (withPayloadDB retryCount f) conn >>= \case
+    run (transaction $ withPayloadDB retryCount f) conn >>= \case
       Left a -> throwIO $ QueryException a
       Right a -> case a of
         Left x -> return $ Left x
