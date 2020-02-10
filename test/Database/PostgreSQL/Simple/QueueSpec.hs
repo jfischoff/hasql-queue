@@ -75,11 +75,6 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
       60
       50
 
-data Abort = Abort
-  deriving (Show, Eq, Typeable)
-
-instance Exception Abort
-
 withConnection :: (Connection -> IO ()) -> Pool Connection -> IO ()
 withConnection = flip withResource
 
@@ -110,21 +105,23 @@ spec = describe "Database.Queue" $ parallel $ do
       runReadCommitted pool getCountDB `shouldReturn` 0
 
     it "enqueuesDB/withPayloadDB" $ \pool -> do
-      (payloadId, theCount) <- runReadCommitted pool $ do
+      (withPayloadDBResult, firstCount, secondCount) <- runReadCommitted pool $ do
         payloadId <- enqueueDB $ String "Hello"
-        (payloadId,) <$> getCountDB
-      theCount `shouldBe` 1
-
-      theCount' <- runReadCommitted pool $ do
-        -- TODO assert that this returns a right
-        withPayloadDB 8 (\(Payload {..}) -> do
-          pId `shouldBe` payloadId
-          pValue `shouldBe` String "Hello"
+        firstCount <- getCountDB
+        withPayloadDBResult <- withPayloadDB 8 (\(Payload {..}) -> do
+            pId `shouldBe` payloadId
+            pValue `shouldBe` String "Hello"
           )
 
-        getCountDB
+        secondCount <- getCountDB
+        pure (withPayloadDBResult, firstCount, secondCount)
 
-      theCount' `shouldBe` 0
+      case withPayloadDBResult of
+        Left err -> fail $ "withPayloadDB failed with: " <> show err
+        Right _ -> pure ()
+
+      firstCount `shouldBe` 1
+      secondCount `shouldBe` 0
 
 
     it "enqueuesDB/withPayloadDB/retries" $ \pool -> do
@@ -145,39 +142,57 @@ spec = describe "Database.Queue" $ parallel $ do
         )
 
     it "enqueuesDB/withPayloadDB/timesout" $ \pool -> do
-      (theCount, xs) <- runReadCommitted pool $ do
+      (firstCount, xs, secondCount) <- runReadCommitted pool $ do
         void $ enqueueDB $ String "Hello"
-        theCount <- getCountDB
+        firstCount <- getCountDB
 
-        fmap (theCount,) $ replicateM 2 $ withPayloadDB 1 (\(Payload {..}) ->
+        xs <- replicateM 2 $ withPayloadDB 1 (\(Payload {..}) ->
             throwM $ userError "not enough tries"
           )
 
-      theCount `shouldBe` 1
+        secondCount <- getCountDB
+
+        pure (firstCount, xs, secondCount)
+
+      firstCount `shouldBe` 1
       all isLeft xs `shouldBe` True
 
-      runReadCommitted pool getCountDB `shouldReturn` 0
+      secondCount `shouldBe` 0
+
+    it "selects the oldest first" $ \pool -> do
+      (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount) <- runReadCommitted pool $ do
+        payloadId0 <- enqueueDB $ String "Hello"
+        liftIO $ threadDelay 100
+
+        payloadId1 <- enqueueDB $ String "Hi"
+
+        firstCount <- getCountDB
+
+        firstWithPayloadResult <- withPayloadDB 8 (\(Payload {..}) -> do
+            pId `shouldBe` payloadId0
+            pValue `shouldBe` String "Hello"
+          )
+
+        secondWithPayloadResult <- withPayloadDB 8 (\(Payload {..}) -> do
+            pId `shouldBe` payloadId1
+            pValue `shouldBe` String "Hi"
+          )
+
+        secondCount <- getCountDB
+        pure (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount)
+
+      firstCount `shouldBe` 2
+
+      case firstWithPayloadResult of
+        Left err -> fail $ "first withPayloadDB failed with: " <> show err
+        Right _ -> pure ()
+
+      case secondWithPayloadResult of
+        Left err -> fail $ "second withPayloadDB failed with: " <> show err
+        Right _ -> pure ()
+
+      secondCount `shouldBe` 0
 {-
-    it "selects the oldest first" $ withReadCommitted $ do
-      payloadId0 <- enqueueDB $ String "Hello"
-      liftIO $ threadDelay 100
-
-      payloadId1 <- enqueueDB $ String "Hi"
-
-      getCountDB `shouldReturn` 2
-
-      either throwM return =<< withPayloadDB 8 (\(Payload {..}) -> do
-        pId `shouldBe` payloadId0
-        pValue `shouldBe` String "Hello"
-        )
-
-      either throwM return =<< withPayloadDB 8 (\(Payload {..}) -> do
-        pId `shouldBe` payloadId1
-        pValue `shouldBe` String "Hi"
-        )
-
-      getCountDB `shouldReturn` 0
-
     it "enqueues and dequeues concurrently withPayload" $ \testDB -> do
       let withPool' = flip withConnection testDB
           elementCount = 1000 :: Int

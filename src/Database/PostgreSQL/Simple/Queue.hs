@@ -100,29 +100,22 @@ import           Control.Monad ((<=<))
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans.Except
+import           Data.Typeable
 
-{-
-
-import           Control.Monad
-import           Control.Monad.Catch
-
-import           Data.Function
-import           Data.Int
-import           Data.Text                               (Text)
-import           Data.Time
-import           Hasql.Connection
-
-x
-
-import           Data.Maybe
-
--}
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
+
+newtype QueryException = QueryException QueryError
+  deriving (Eq, Show, Typeable)
+
+queryErrorToSomeException :: QueryError -> SomeException
+queryErrorToSomeException = toException . QueryException
+
+instance Exception QueryException
+
 newtype PayloadId = PayloadId { unPayloadId :: Int64 }
   deriving (Eq, Show)
-
 
 payloadIdEncoder :: E.Value PayloadId
 payloadIdEncoder = unPayloadId >$< E.int8
@@ -133,17 +126,13 @@ payloadIdDecoder = PayloadId <$> D.int8
 payloadIdRow :: D.Row PayloadId
 payloadIdRow = D.column (D.nonNullable payloadIdDecoder)
 
-{-
-instance ToRow PayloadId where
-  toRow = toRow . Only
--}
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
 --   so some sort of process can occur with it, usually something in 'IO'.
 --   Once the processing is complete, the `Payload' is moved the 'Dequeued'
 --   state, which is the terminal state.
-data State = Enqueued | Dequeued
+data State = Enqueued | Dequeued | Failed
   deriving (Show, Eq, Ord, Enum, Bounded)
 
 stateDecoder :: D.Value State
@@ -152,29 +141,10 @@ stateDecoder = D.enum $ \txt ->
     pure Enqueued
   else if txt == "dequeued" then
     pure Dequeued
+  else if txt == "failed" then
+    pure Failed
   else Nothing
 
-
-{-
-instance ToField State where
-  toField = toField . \case
-    Enqueued -> "enqueued" :: Text
-    Dequeued -> "dequeued"
-
--- Converting from enumerations is annoying :(
-instance FromField State where
-  fromField f y = do
-     n <- typename f
-     if n == "state_t" then case y of
-       Nothing -> returnError UnexpectedNull f "state can't be NULL"
-       Just y' -> case y' of
-         "enqueued" -> return Enqueued
-         "dequeued" -> return Dequeued
-         x          -> returnError ConversionFailed f (show x)
-     else
-       returnError Incompatible f $
-         "Expect type name to be state but it was " ++ show n
--}
 
 -- The fundemental record stored in the queue. The queue is a single table
 -- and each row consists of a 'Payload'
@@ -203,7 +173,6 @@ payloadDecoder
 -}
 enqueue :: Connection -> Value -> IO PayloadId
 enqueue conn val = either (throwIO . userError . show) pure =<< run (enqueueDB val) conn
-
 
 enqueueDB :: Value -> Session PayloadId
 enqueueDB value = enqueueWithDB value 0
@@ -330,6 +299,14 @@ setEnqueueWithCount thePid retries = do
     UPDATE payloads SET state='enqueued', attempts=$2 WHERE id = $1
   |]
 
+setFailed :: PayloadId -> Session ()
+setFailed thePid = do
+  let encoder = E.param (E.nonNullable payloadIdEncoder)
+  statement thePid $ state encoder D.noResult [here|
+    UPDATE payloads SET state='failed' WHERE id = $1
+  |]
+
+
 -- todo make a failed state
 withPayloadDB :: forall a.
                  Int
@@ -342,9 +319,45 @@ withPayloadDB retryCount f = getEnqueue >>= \case
   Just payload@Payload {..} -> fmap Just <$> do
     setDequeued pId
 
+    let updateStateOnFailure = if pAttempts < retryCount
+          then setEnqueueWithCount pId (pAttempts + 1)
+          else setFailed pId
+
     bisequenceA
-      .   bimap (\e -> setEnqueueWithCount pId (pAttempts + 1) >> return e) pure
+      .   bimap (\e -> updateStateOnFailure >> return e) pure
       =<< liftIO (try $ f payload)
+
+{-| Return the oldest 'Payload' in the 'Enqueued' state or block until a
+    payload arrives. This function utilizes PostgreSQL's LISTEN and NOTIFY
+    functionality to avoid excessively polling of the Session while
+    waiting for new payloads, without scarficing promptness.
+-}
+
+joinLeft :: Either a (Either a b) -> Either a b
+joinLeft = \case
+  Left x -> Left x
+  Right x -> case x of
+    Left y -> Left y
+    Right y -> Right y
+
+withPayload :: Connection
+            -> Int
+            -- ^ retry count
+            -> (Payload -> IO a)
+            -> IO (Either SomeException a)
+withPayload conn retryCount f = bracket_
+  (execute conn $ "LISTEN " <> notifyName)
+  (execute conn $ "UNLISTEN " <> notifyName)
+  $ fix
+  $ \continue ->
+    run (withPayloadDB retryCount f) conn >>= \case
+      Left a -> throwIO $ QueryException a
+      Right a -> case a of
+        Left x -> return $ Left x
+        Right Nothing -> do
+          notifyPayload conn
+          continue
+        Right (Just x) -> return $ Right x
 
 {-
 
@@ -409,27 +422,7 @@ from the payload ingesting function.
 
 
 
-{-| Return the oldest 'Payload' in the 'Enqueued' state or block until a
-    payload arrives. This function utilizes PostgreSQL's LISTEN and NOTIFY
-    functionality to avoid excessively polling of the Session while
-    waiting for new payloads, without scarficing promptness.
--}
-withPayload :: Connection
-            -> Int
-            -- ^ retry count
-            -> (Payload -> IO a)
-            -> IO (Either SomeException a)
-withPayload conn retryCount f = bracket_
-  (Simple.execute_ conn $ "LISTEN " <> notifyName)
-  (Simple.execute_ conn $ "UNLISTEN " <> notifyName)
-  $ fix
-  $ \continue -> runDBT (withPayloadDB retryCount f) ReadCommitted conn
-  >>= \case
-    Left x -> return $ Left x
-    Right Nothing -> do
-      notifyPayload conn
-      continue
-    Right (Just x) -> return $ Right x
+
 
 
 -}
