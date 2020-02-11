@@ -155,7 +155,6 @@ data Payload = Payload
   -- ^ The JSON value of a payload
   , pState      :: State
   , pAttempts   :: Int
-  , pCreatedAt  :: UTCTime
   , pModifiedAt :: UTCTime
   } deriving (Show, Eq)
 
@@ -166,7 +165,6 @@ payloadDecoder
   <*> D.column (D.nonNullable D.jsonb)
   <*> D.column (D.nonNullable stateDecoder)
   <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
-  <*> D.column (D.nonNullable D.timestamptz)
   <*> D.column (D.nonNullable D.timestamptz)
 
 {-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
@@ -207,7 +205,7 @@ dequeueDB = do
             FOR UPDATE SKIP LOCKED
             LIMIT 1
           )
-        RETURNING id, value, state, attempts, created_at, modified_at
+        RETURNING id, value, state, attempts, modified_at
         |]
       encoder = mempty
       decoder = D.rowMaybe payloadDecoder
@@ -275,7 +273,7 @@ getCountDB = do
 
 getEnqueue :: Session (Maybe Payload)
 getEnqueue = statement () $ state mempty (D.rowMaybe payloadDecoder) [here|
-    SELECT id, value, state, attempts, created_at, modified_at
+    SELECT id, value, state, attempts, modified_at
     FROM payloads
     WHERE state='enqueued'
     ORDER BY modified_at ASC
