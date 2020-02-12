@@ -61,6 +61,8 @@ extra-source-files:
 ghc-options:
 - -Wno-unused-do-bind
 
+tested-with: GHC ==8.8.1
+
 default-extensions:
 - OverloadedStrings
 - LambdaCase

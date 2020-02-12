@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: aaaafb81ee97a387aa499fdf318fc209ba7d8779c93c80cbae189643d45b60b2
+-- hash: a9756d7a6ccdc493d488fc2838378ec5a77aa8a638469d6363d588dcef50ab1f
 
 name:           hasql-queue
 version:        1.0.1
@@ -43,6 +43,7 @@ maintainer:     jonathangfischoff@gmail.com
 copyright:      2017 Jonathan Fischoff
 license:        BSD3
 license-file:   LICENSE
+tested-with:    GHC ==8.8.1
 build-type:     Simple
 extra-source-files:
     README.md
