@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: aaaafb81ee97a387aa499fdf318fc209ba7d8779c93c80cbae189643d45b60b2
+-- hash: 978e8a196135ded3b2cf7e6aed82470d612ded985e80ee64ff95bce242bd0442
 
 name:           hasql-queue
 version:        1.0.1
@@ -43,6 +43,7 @@ maintainer:     jonathangfischoff@gmail.com
 copyright:      2017 Jonathan Fischoff
 license:        BSD3
 license-file:   LICENSE
+tested-with:    GHC ==8.8.1
 build-type:     Simple
 extra-source-files:
     README.md
@@ -109,9 +110,8 @@ executable benchmark
 
 test-suite unit-tests
   type: exitcode-stdio-1.0
-  main-is: Spec.hs
+  main-is: Database/PostgreSQL/Simple/QueueSpec.hs
   other-modules:
-      Database.PostgreSQL.Simple.QueueSpec
       Paths_hasql_queue
   hs-source-dirs:
       test
@@ -131,7 +131,6 @@ test-suite unit-tests
     , here
     , hspec
     , hspec-core
-    , hspec-discover
     , hspec-expectations-lifted
     , monad-control
     , random

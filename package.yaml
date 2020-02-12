@@ -61,6 +61,8 @@ extra-source-files:
 ghc-options:
 - -Wno-unused-do-bind
 
+tested-with: GHC ==8.8.1
+
 default-extensions:
 - OverloadedStrings
 - LambdaCase
@@ -90,7 +92,7 @@ library:
 
 tests:
   unit-tests:
-    main: Spec.hs
+    main: Database/PostgreSQL/Simple/QueueSpec.hs
     source-dirs: test
     ghc-options:
     - -O2
@@ -103,7 +105,6 @@ tests:
     - hasql-queue
     - hspec
     - hspec-core
-    - hspec-discover
     - hspec-expectations-lifted
     - async
     - split

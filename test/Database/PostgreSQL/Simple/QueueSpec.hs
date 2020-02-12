@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-module Database.PostgreSQL.Simple.QueueSpec where
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Concurrent.Async
@@ -13,7 +12,7 @@ import           Data.IORef
 import           Data.List
 import           Database.PostgreSQL.Simple.Queue
 import           Database.PostgreSQL.Simple.Queue.Migrate
-import           Test.Hspec                     (SpecWith, Spec, describe, parallel, it, afterAll, beforeAll, runIO)
+import           Test.Hspec                     (SpecWith, Spec, hspec, describe, parallel, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
@@ -29,6 +28,9 @@ import qualified Data.ByteString.Char8 as BSC
 import           Hasql.Connection
 import           Hasql.Session
 import           Data.Typeable
+
+main :: IO ()
+main = hspec spec
 
 aroundAll :: forall a. ((a -> IO ()) -> IO ()) -> SpecWith a -> Spec
 aroundAll withFunc specWith = do

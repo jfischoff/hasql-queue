@@ -1,3 +1,5 @@
+[![Travis CI Status](https://travis-ci.org/jfischoff/hasql-queue.svg?branch=master)](http://travis-ci.org/jfischoff/hasql-queue)
+
 # postgresql-simple-queue
 
 This module utilizes PostgreSQL to implement a durable queue for efficently processing arbitrary payloads which can be represented as JSON.
@@ -27,7 +29,7 @@ In another thread or process, the consumer would drain the queue.
     dequeue conn $ pId payload
 ```
 
-## Installation 
+## Installation
 
 ```bash
 stack install postgresql-simple-queue
