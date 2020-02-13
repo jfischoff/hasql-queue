@@ -50,18 +50,22 @@ use cases.
 module Database.PostgreSQL.Simple.Queue
   ( -- * Types
     PayloadId (..)
-  , payloadDecoder
+  , payloadIdDecoder
+  , payloadIdRow
+  , payloadIdEncoder
   , State (..)
+  , stateDecoder
   , Payload (..)
+  , payloadDecoder
   , enqueue
   , dequeue
   , enqueueDB
   , dequeueDB
-  , execute
   , getCount
   , getCountDB
   , withPayloadDB
   , withPayload
+  , execute
   -- * Session API
 {-
   , setup
@@ -146,7 +150,7 @@ stateDecoder = D.enum $ \txt ->
   else Nothing
 
 
--- The fundemental record stored in the queue. The queue is a single table
+-- | The fundemental record stored in the queue. The queue is a single table
 -- and each row consists of a 'Payload'
 data Payload = Payload
   { pId         :: PayloadId
@@ -157,6 +161,7 @@ data Payload = Payload
   , pModifiedAt :: UTCTime
   } deriving (Show, Eq)
 
+-- | 'Payload' decoder
 payloadDecoder :: D.Row Payload
 payloadDecoder
    =  Payload
@@ -172,24 +177,29 @@ payloadDecoder
 enqueue :: Connection -> Value -> IO PayloadId
 enqueue conn val = either (throwIO . userError . show) pure =<< run (transaction $ enqueueDB val) conn
 
-enqueueDB :: Value -> Session PayloadId
-enqueueDB value = enqueueWithDB value 0
+{-| Enqueue a new JSON value into the queue. This particularly function
+    can be composed as part of a larger database transaction. For instance,
+    a single transaction could create a user and enqueue a email message.
 
-enqueueWithDB :: Value -> Int -> Session PayloadId
-enqueueWithDB value attempts = do
+ @
+   createAccountDB userRecord = do
+     createUserDB userRecord
+     'enqueueDB' $ makeVerificationEmail userRecord
+ @
+-}
+enqueueDB :: Value -> Session PayloadId
+enqueueDB value = do
   let theQuery = [here|
         INSERT INTO payloads (attempts, value)
-        VALUES ($1, $2)
+        VALUES (0, $1)
         RETURNING id
         |]
       theStatement = Statement theQuery encoder decoder True
-      encoder =
-        (fst >$< E.param (E.nonNullable $ fromIntegral >$< E.int4)) <>
-        (snd >$< E.param (E.nonNullable E.jsonb))
+      encoder = E.param $ E.nonNullable E.jsonb
       decoder = D.singleRow (D.column (D.nonNullable payloadIdDecoder))
 
   sql "NOTIFY postgresql_simple_enqueue"
-  statement (attempts, value) theStatement
+  statement value theStatement
 
 dequeueDB :: Session (Maybe Payload)
 dequeueDB = do
@@ -387,17 +397,7 @@ setupDB = sql
 
   |]
 
-{-| Enqueue a new JSON value into the queue. This particularly function
-    can be composed as part of a larger database transaction. For instance,
-    a single transaction could create a user and enqueue a email message.
 
- @
-   createAccount userRecord = do
-      'runDBTSerializable' $ do
-         createUserDB userRecord
-         'enqueueDB' $ makeVerificationEmail userRecord
- @
--}
 
 
 
