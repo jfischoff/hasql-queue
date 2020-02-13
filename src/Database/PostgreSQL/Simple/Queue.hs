@@ -106,7 +106,7 @@ import           Data.Typeable
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
-
+-- TODO remove
 newtype QueryException = QueryException QueryError
   deriving (Eq, Show, Typeable)
 
@@ -126,7 +126,6 @@ payloadIdDecoder = PayloadId <$> D.int8
 
 payloadIdRow :: D.Row PayloadId
 payloadIdRow = D.column (D.nonNullable payloadIdDecoder)
-
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
