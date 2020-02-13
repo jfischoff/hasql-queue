@@ -171,12 +171,6 @@ payloadDecoder
   <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
   <*> D.column (D.nonNullable D.timestamptz)
 
-{-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
-    which can be composed with other queries in a single transaction.
--}
-enqueue :: Connection -> Value -> IO PayloadId
-enqueue conn val = either (throwIO . userError . show) pure =<< run (transaction $ enqueueDB val) conn
-
 {-| Enqueue a new JSON value into the queue. This particularly function
     can be composed as part of a larger database transaction. For instance,
     a single transaction could create a user and enqueue a email message.
@@ -200,6 +194,12 @@ enqueueDB value = do
 
   sql "NOTIFY postgresql_simple_enqueue"
   statement value theStatement
+
+{-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
+    which can be composed with other queries in a single transaction.
+-}
+enqueue :: Connection -> Value -> IO PayloadId
+enqueue conn val = either (throwIO . userError . show) pure =<< run (transaction $ enqueueDB val) conn
 
 dequeueDB :: Session (Maybe Payload)
 dequeueDB = do
@@ -312,8 +312,6 @@ setFailed thePid = do
     UPDATE payloads SET state='failed' WHERE id = $1
   |]
 
-
--- todo make a failed state
 withPayloadDB :: forall a.
                  Int
               -- ^ retry count
@@ -353,6 +351,14 @@ joinLeft = \case
     Left y -> Left y
     Right y -> Right y
 
+{-|
+
+Attempt to get a payload and process it. If the function passed in throws an exception
+return it on the left side of the `Either`. Re-add the payload up to some passed in
+maximum. Return `Nothing` is the `payloads` table is empty otherwise the result is an `a`
+from the payload ingesting function.
+
+-}
 withPayload :: Connection
             -> Int
             -- ^ retry count
@@ -384,14 +390,7 @@ withPayload conn retryCount f = bracket_
 -- | Transition a 'Payload' to the 'Dequeued' state.
 
 
-{-|
 
-Attempt to get a payload and process it. If the function passed in throws an exception
-return it on the left side of the `Either`. Re-add the payload up to some passed in
-maximum. Return `Nothing` is the `payloads` table is empty otherwise the result is an `a`
-from the payload ingesting function.
-
--}
 
 
 
