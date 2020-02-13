@@ -265,6 +265,7 @@ dequeue conn = bracket_
 getCount :: Connection -> IO Int64
 getCount conn = either (throwIO . userError . show) pure =<< run getCountDB conn
 
+state :: E.Params a -> D.Result b -> ByteString -> Statement a b
 state enc dec theSql = Statement theSql enc dec True
 
 -- | Get the number of rows in the 'Enqueued' state.
@@ -379,28 +380,6 @@ withPayload conn retryCount f = bracket_
 -------------------------------------------------------------------------------
 
 
-{-|
-Prepare all the statements.
--}
-setupDB :: Session ()
-setupDB = sql
-  [here|
-
-
-  PREPARE get_enqueue AS
-
-
-  PREPARE update_state (int8) AS
-
-
-  PREPARE get_count AS
-
-  |]
-
-
-
-
-
 
 -- | Transition a 'Payload' to the 'Dequeued' state.
 
@@ -419,12 +398,5 @@ from the payload ingesting function.
 -------------------------------------------------------------------------------
 ---  IO API
 -------------------------------------------------------------------------------
-
-
-
-
-
-
-
 
 -}
