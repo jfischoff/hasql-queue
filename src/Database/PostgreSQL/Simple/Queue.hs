@@ -50,18 +50,22 @@ use cases.
 module Database.PostgreSQL.Simple.Queue
   ( -- * Types
     PayloadId (..)
-  , payloadDecoder
+  , payloadIdDecoder
+  , payloadIdRow
+  , payloadIdEncoder
   , State (..)
+  , stateDecoder
   , Payload (..)
+  , payloadDecoder
   , enqueue
   , dequeue
   , enqueueDB
   , dequeueDB
-  , execute
   , getCount
   , getCountDB
   , withPayloadDB
   , withPayload
+  , execute
   -- * Session API
 {-
   , setup
@@ -106,7 +110,7 @@ import           Data.Typeable
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
-
+-- TODO remove
 newtype QueryException = QueryException QueryError
   deriving (Eq, Show, Typeable)
 
@@ -127,7 +131,6 @@ payloadIdDecoder = PayloadId <$> D.int8
 payloadIdRow :: D.Row PayloadId
 payloadIdRow = D.column (D.nonNullable payloadIdDecoder)
 
-
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
 --   so some sort of process can occur with it, usually something in 'IO'.
@@ -147,7 +150,7 @@ stateDecoder = D.enum $ \txt ->
   else Nothing
 
 
--- The fundemental record stored in the queue. The queue is a single table
+-- | The fundemental record stored in the queue. The queue is a single table
 -- and each row consists of a 'Payload'
 data Payload = Payload
   { pId         :: PayloadId
@@ -158,6 +161,7 @@ data Payload = Payload
   , pModifiedAt :: UTCTime
   } deriving (Show, Eq)
 
+-- | 'Payload' decoder
 payloadDecoder :: D.Row Payload
 payloadDecoder
    =  Payload
@@ -167,30 +171,35 @@ payloadDecoder
   <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
   <*> D.column (D.nonNullable D.timestamptz)
 
+{-| Enqueue a new JSON value into the queue. This particularly function
+    can be composed as part of a larger database transaction. For instance,
+    a single transaction could create a user and enqueue a email message.
+
+ @
+   createAccountDB userRecord = do
+     createUserDB userRecord
+     'enqueueDB' $ makeVerificationEmail userRecord
+ @
+-}
+enqueueDB :: Value -> Session PayloadId
+enqueueDB value = do
+  let theQuery = [here|
+        INSERT INTO payloads (attempts, value)
+        VALUES (0, $1)
+        RETURNING id
+        |]
+      theStatement = Statement theQuery encoder decoder True
+      encoder = E.param $ E.nonNullable E.jsonb
+      decoder = D.singleRow (D.column (D.nonNullable payloadIdDecoder))
+
+  sql "NOTIFY postgresql_simple_enqueue"
+  statement value theStatement
+
 {-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
     which can be composed with other queries in a single transaction.
 -}
 enqueue :: Connection -> Value -> IO PayloadId
 enqueue conn val = either (throwIO . userError . show) pure =<< run (transaction $ enqueueDB val) conn
-
-enqueueDB :: Value -> Session PayloadId
-enqueueDB value = enqueueWithDB value 0
-
-enqueueWithDB :: Value -> Int -> Session PayloadId
-enqueueWithDB value attempts = do
-  let theQuery = [here|
-        INSERT INTO payloads (attempts, value)
-        VALUES ($1, $2)
-        RETURNING id
-        |]
-      theStatement = Statement theQuery encoder decoder True
-      encoder =
-        (fst >$< E.param (E.nonNullable $ fromIntegral >$< E.int4)) <>
-        (snd >$< E.param (E.nonNullable E.jsonb))
-      decoder = D.singleRow (D.column (D.nonNullable payloadIdDecoder))
-
-  sql "NOTIFY postgresql_simple_enqueue"
-  statement (attempts, value) theStatement
 
 dequeueDB :: Session (Maybe Payload)
 dequeueDB = do
@@ -256,6 +265,7 @@ dequeue conn = bracket_
 getCount :: Connection -> IO Int64
 getCount conn = either (throwIO . userError . show) pure =<< run getCountDB conn
 
+state :: E.Params a -> D.Result b -> ByteString -> Statement a b
 state enc dec theSql = Statement theSql enc dec True
 
 -- | Get the number of rows in the 'Enqueued' state.
@@ -302,8 +312,6 @@ setFailed thePid = do
     UPDATE payloads SET state='failed' WHERE id = $1
   |]
 
-
--- todo make a failed state
 withPayloadDB :: forall a.
                  Int
               -- ^ retry count
@@ -343,6 +351,14 @@ joinLeft = \case
     Left y -> Left y
     Right y -> Right y
 
+{-|
+
+Attempt to get a payload and process it. If the function passed in throws an exception
+return it on the left side of the `Either`. Re-add the payload up to some passed in
+maximum. Return `Nothing` is the `payloads` table is empty otherwise the result is an `a`
+from the payload ingesting function.
+
+-}
 withPayload :: Connection
             -> Int
             -- ^ retry count
@@ -370,62 +386,16 @@ withPayload conn retryCount f = bracket_
 -------------------------------------------------------------------------------
 
 
-{-|
-Prepare all the statements.
--}
-setupDB :: Session ()
-setupDB = sql
-  [here|
-
-
-  PREPARE get_enqueue AS
-
-
-  PREPARE update_state (int8) AS
-
-
-  PREPARE get_count AS
-
-  |]
-
-{-| Enqueue a new JSON value into the queue. This particularly function
-    can be composed as part of a larger database transaction. For instance,
-    a single transaction could create a user and enqueue a email message.
-
- @
-   createAccount userRecord = do
-      'runDBTSerializable' $ do
-         createUserDB userRecord
-         'enqueueDB' $ makeVerificationEmail userRecord
- @
--}
-
-
-
 
 -- | Transition a 'Payload' to the 'Dequeued' state.
 
 
-{-|
 
-Attempt to get a payload and process it. If the function passed in throws an exception
-return it on the left side of the `Either`. Re-add the payload up to some passed in
-maximum. Return `Nothing` is the `payloads` table is empty otherwise the result is an `a`
-from the payload ingesting function.
-
--}
 
 
 
 -------------------------------------------------------------------------------
 ---  IO API
 -------------------------------------------------------------------------------
-
-
-
-
-
-
-
 
 -}
