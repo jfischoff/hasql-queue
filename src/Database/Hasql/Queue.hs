@@ -47,7 +47,7 @@ use cases.
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE OverloadedStrings          #-}
-module Database.PostgreSQL.Simple.Queue
+module Database.Hasql.Queue
   ( -- * Types
     PayloadId (..)
   , payloadIdDecoder
@@ -67,18 +67,6 @@ module Database.PostgreSQL.Simple.Queue
   , withPayload
   , execute
   -- * Session API
-{-
-  , setup
-
-
-
-  -- * IO API
-  , enqueue
-  , tryDequeue
-  , dequeue
-
-
--}
   ) where
 
 import           Data.String.Here.Uninterpolated

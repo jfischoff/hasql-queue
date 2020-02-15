@@ -1,7 +1,7 @@
 module Main where
 import System.Environment
-import Database.PostgreSQL.Simple.Queue
-import Database.PostgreSQL.Simple.Queue.Migrate
+import Database.Hasql.Queue
+import Database.Hasql.Queue.Migrate
 import Control.Concurrent.Async
 import Data.Aeson
 import Data.IORef

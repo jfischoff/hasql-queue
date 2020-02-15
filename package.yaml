@@ -87,12 +87,12 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - Database.PostgreSQL.Simple.Queue
-  - Database.PostgreSQL.Simple.Queue.Migrate
+  - Database.Hasql.Queue
+  - Database.Hasql.Queue.Migrate
 
 tests:
   unit-tests:
-    main: Database/PostgreSQL/Simple/QueueSpec.hs
+    main: Database/Hasql/QueueSpec.hs
     source-dirs: test
     ghc-options:
     - -O2
