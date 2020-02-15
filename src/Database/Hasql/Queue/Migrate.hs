@@ -16,31 +16,20 @@ migrationQueryString = [here|
     END IF;
   END$$;
 
-  CREATE OR REPLACE FUNCTION update_row_modified_function()
-  RETURNS TRIGGER AS
-  $$
-  BEGIN
-      NEW.modified_at = clock_timestamp();
-      RETURN NEW;
-  END;
-  $$
-  language 'plpgsql';
+
+  CREATE SEQUENCE IF NOT EXISTS modified_index START 1;
 
   CREATE TABLE IF NOT EXISTS payloads
   ( id BIGSERIAL PRIMARY KEY
   , value jsonb NOT NULL
   , attempts int NOT NULL DEFAULT 0
   , state state_t NOT NULL DEFAULT 'enqueued'
-  , modified_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
+  , modified_at int8 NOT NULL DEFAULT nextval('modified_index')
   ) WITH (fillfactor = 50);
 
   CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at)
     WHERE (state = 'enqueued');
 
-  DROP TRIGGER IF EXISTS payloads_modified ON payloads;
-  CREATE TRIGGER payloads_modified
-  BEFORE UPDATE ON payloads
-  FOR EACH ROW EXECUTE PROCEDURE update_row_modified_function();
 
 
 |]
