@@ -146,7 +146,7 @@ data Payload = Payload
   -- ^ The JSON value of a payload
   , pState      :: State
   , pAttempts   :: Int
-  , pModifiedAt :: UTCTime
+  , pModifiedAt :: Int
   } deriving (Show, Eq)
 
 -- | 'Payload' decoder
@@ -157,7 +157,7 @@ payloadDecoder
   <*> D.column (D.nonNullable D.jsonb)
   <*> D.column (D.nonNullable stateDecoder)
   <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
-  <*> D.column (D.nonNullable D.timestamptz)
+  <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
 
 {-| Enqueue a new JSON value into the queue. This particularly function
     can be composed as part of a larger database transaction. For instance,

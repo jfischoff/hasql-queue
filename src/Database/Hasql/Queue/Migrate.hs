@@ -16,11 +16,14 @@ migrationQueryString = [here|
     END IF;
   END$$;
 
+
+  CREATE SEQUENCE IF NOT EXISTS modified_index START 1;
+
   CREATE OR REPLACE FUNCTION update_row_modified_function()
   RETURNS TRIGGER AS
   $$
   BEGIN
-      NEW.modified_at = clock_timestamp();
+      NEW.modified_at = nextval('modified_index');
       RETURN NEW;
   END;
   $$
@@ -31,7 +34,7 @@ migrationQueryString = [here|
   , value jsonb NOT NULL
   , attempts int NOT NULL DEFAULT 0
   , state state_t NOT NULL DEFAULT 'enqueued'
-  , modified_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
+  , modified_at int8 NOT NULL DEFAULT nextval('modified_index')
   ) WITH (fillfactor = 50);
 
   CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at)
