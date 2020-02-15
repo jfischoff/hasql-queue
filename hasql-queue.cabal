@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 978e8a196135ded3b2cf7e6aed82470d612ded985e80ee64ff95bce242bd0442
+-- hash: d7997fe1ff958bde5f08be087097b883fb10de79b2a22537d738aa0729fb1dfb
 
 name:           hasql-queue
 version:        1.0.1
@@ -54,8 +54,8 @@ source-repository head
 
 library
   exposed-modules:
-      Database.PostgreSQL.Simple.Queue
-      Database.PostgreSQL.Simple.Queue.Migrate
+      Database.Hasql.Queue
+      Database.Hasql.Queue.Migrate
   other-modules:
       Paths_hasql_queue
   hs-source-dirs:
@@ -110,7 +110,7 @@ executable benchmark
 
 test-suite unit-tests
   type: exitcode-stdio-1.0
-  main-is: Database/PostgreSQL/Simple/QueueSpec.hs
+  main-is: Database/Hasql/QueueSpec.hs
   other-modules:
       Paths_hasql_queue
   hs-source-dirs:

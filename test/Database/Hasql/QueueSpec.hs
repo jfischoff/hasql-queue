@@ -10,8 +10,8 @@ import           Data.Aeson
 import           Data.Function
 import           Data.IORef
 import           Data.List
-import           Database.PostgreSQL.Simple.Queue
-import           Database.PostgreSQL.Simple.Queue.Migrate
+import           Database.Hasql.Queue
+import           Database.Hasql.Queue.Migrate
 import           Test.Hspec                     (SpecWith, Spec, hspec, describe, parallel, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
 import           Control.Monad.Catch
