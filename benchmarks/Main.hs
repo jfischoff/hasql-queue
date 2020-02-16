@@ -2,7 +2,6 @@ module Main where
 import System.Environment
 import Database.Hasql.Queue
 import Database.Hasql.Queue.Migrate
-import Control.Concurrent.Async
 import Data.Aeson
 import Data.IORef
 import Control.Exception
@@ -12,7 +11,7 @@ import qualified Data.ByteString.Char8 as BSC
 import           Data.Pool
 import           Database.Postgres.Temp
 import           Control.Concurrent
-import           Control.Monad (replicateM, forever, void)
+import           Control.Monad (replicateM, forever, void, replicateM_)
 import           Hasql.Session
 import           Hasql.Connection
 import           Data.Function
@@ -73,11 +72,11 @@ main = do
             Nothing -> next
             Just _ -> pure ()
 
-    replicateConcurrently_ totalEnqueueCount enqueueAction
-    replicateConcurrently_ initialDequeueCount dequeueAction
+    replicateM_ totalEnqueueCount enqueueAction
+    replicateM_ initialDequeueCount dequeueAction
 
     withResource pool $ \conn -> void $ run (sql "VACUUM FULL ANALYZE") conn
-
+    putStrLn "Finished VACUUM FULL ANALYZE"
     -- forever $ threadDelay 1000000000
 
     let enqueueLoop = forever $ do
@@ -89,8 +88,8 @@ main = do
            atomicModifyIORef' dequeueCounter $ \x -> (x+1, ())
 
     -- Need better exception behavior ... idk ... I'll deal with this later
-    _enqueueThreads <- replicateM producerCount $ async enqueueLoop
-    _dequeueThreads <- replicateM consumerCount $ async dequeueLoop
+    _enqueueThreads <- replicateM producerCount $ forkIO enqueueLoop
+    _dequeueThreads <- replicateM consumerCount $ forkIO dequeueLoop
 
     threadDelay $ time * 1000000
     throwIO $ userError "Finished"
