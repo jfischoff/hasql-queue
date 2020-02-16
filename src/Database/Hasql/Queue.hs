@@ -143,42 +143,41 @@ stateDecoder = D.enum $ \txt ->
 
 -- | The fundemental record stored in the queue. The queue is a single table
 -- and each row consists of a 'Payload'
-data Payload = Payload
+data Payload a = Payload
   { pId         :: PayloadId
-  , pValue      :: Value
-  -- ^ The JSON value of a payload
   , pState      :: State
   , pAttempts   :: Int
   , pModifiedAt :: Int
+  , pValue      :: a
   } deriving (Show, Eq)
 
 -- | 'Payload' decoder
-payloadDecoder :: D.Row Payload
-payloadDecoder
+payloadDecoder :: D.Value a -> D.Row (Payload a)
+payloadDecoder thePayloadDecoder
    =  Payload
   <$> payloadIdRow
-  <*> D.column (D.nonNullable D.jsonb)
   <*> D.column (D.nonNullable stateDecoder)
   <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
   <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
+  <*> D.column (D.nonNullable thePayloadDecoder)
 
 -- TODO make an `enqueueNoNotifyDB`
-enqueueNoNotifyDB :: Value -> Session PayloadId
-enqueueNoNotifyDB value = do
+enqueueNoNotifyDB :: E.Value a -> a -> Session PayloadId
+enqueueNoNotifyDB theEncoder value = do
   let theQuery = [here|
         INSERT INTO payloads (attempts, value)
         VALUES (0, $1)
         RETURNING id
         |]
       theStatement = Statement theQuery encoder decoder True
-      encoder = E.param $ E.nonNullable E.jsonb
+      encoder = E.param $ E.nonNullable theEncoder
       decoder = D.singleRow (D.column (D.nonNullable payloadIdDecoder))
 
   statement value theStatement
 
-enqueueNoNotify :: Connection -> Value -> IO PayloadId
-enqueueNoNotify conn val = either (throwIO . userError . show) pure
-  =<< run (transaction $ enqueueNoNotifyDB val) conn
+enqueueNoNotify :: Connection -> E.Value a -> a -> IO PayloadId
+enqueueNoNotify conn theEncoder val = either (throwIO . userError . show) pure
+  =<< run (transaction $ enqueueNoNotifyDB theEncoder val) conn
 
 
 {-| Enqueue a new JSON value into the queue. This particularly function
@@ -191,19 +190,21 @@ enqueueNoNotify conn val = either (throwIO . userError . show) pure
      'enqueueDB' $ makeVerificationEmail userRecord
  @
 -}
-enqueueDB :: Value -> Session PayloadId
-enqueueDB value = do
+enqueueDB :: E.Value a -> a -> Session PayloadId
+enqueueDB theEncoder value = do
   sql "NOTIFY postgresql_simple_enqueue"
-  enqueueNoNotifyDB value
+  enqueueNoNotifyDB theEncoder value
 
 {-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
     which can be composed with other queries in a single transaction.
 -}
-enqueue :: Connection -> Value -> IO PayloadId
-enqueue conn val = either (throwIO . userError . show) pure =<< run (transaction $ enqueueDB val) conn
+enqueue :: Connection -> E.Value a -> a -> IO PayloadId
+enqueue conn theEncoder val =
+  either (throwIO . userError . show) pure
+    =<< run (transaction $ enqueueDB theEncoder val) conn
 
-dequeueDB :: Session (Maybe Payload)
-dequeueDB = do
+dequeueDB :: D.Value a -> Session (Maybe (Payload a))
+dequeueDB valueDecoder = do
   let theQuery = [here|
         UPDATE payloads
         SET state='dequeued'
@@ -215,10 +216,10 @@ dequeueDB = do
             FOR UPDATE SKIP LOCKED
             LIMIT 1
           )
-        RETURNING id, value, state, attempts, modified_at
+        RETURNING id, state, attempts, modified_at, value
         |]
       encoder = mempty
-      decoder = D.rowMaybe payloadDecoder
+      decoder = D.rowMaybe (payloadDecoder valueDecoder)
       theStatement = Statement theQuery encoder decoder True
   statement () theStatement
 
@@ -230,8 +231,10 @@ dequeueDB = do
   See `withPayload' for an alternative interface that will automatically return
   the payload to the 'Enqueued' state if an exception occurs.
 -}
-tryDequeue :: Connection -> IO (Maybe Payload)
-tryDequeue conn = either (throwIO . userError . show) pure =<< run (transaction dequeueDB) conn
+tryDequeue :: Connection -> D.Value a -> IO (Maybe (Payload a))
+tryDequeue conn decoder =
+  either (throwIO . userError . show) pure
+    =<< run (transaction $ dequeueDB decoder) conn
 
 notifyName :: IsString s => s
 notifyName = fromString "postgresql_simple_enqueue"
@@ -247,12 +250,12 @@ execute conn theSql = either (throwIO . userError . show) pure =<< run (sql theS
 
 -- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
 --   'dequeueDB' as a 'Serializable' transaction.
-dequeue :: Connection -> IO Payload
-dequeue conn = bracket_
+dequeue :: Connection -> D.Value a -> IO (Payload a)
+dequeue conn decoder = bracket_
   (execute conn $ "LISTEN " <> notifyName)
   (execute conn $ "UNLISTEN " <> notifyName)
   $ fix $ \continue -> do
-      m <- tryDequeue conn
+      m <- tryDequeue conn decoder
       case m of
         Nothing -> do
           notifyPayload conn
@@ -282,9 +285,9 @@ getCountDB = do
       theStatement = Statement theSql mempty decoder True
   statement () theStatement
 
-getEnqueue :: Session (Maybe Payload)
-getEnqueue = statement () $ state mempty (D.rowMaybe payloadDecoder) [here|
-    SELECT id, value, state, attempts, modified_at
+getEnqueue :: D.Value a -> Session (Maybe (Payload a))
+getEnqueue decoder = statement () $ state mempty (D.rowMaybe $ payloadDecoder decoder) [here|
+    SELECT id, state, attempts, modified_at, value
     FROM payloads
     WHERE state='enqueued'
     ORDER BY modified_at ASC
@@ -313,13 +316,13 @@ setFailed thePid = do
     UPDATE payloads SET state='failed' WHERE id = $1
   |]
 
-withPayloadDB :: forall a.
-                 Int
+withPayloadDB :: D.Value a
+              -> Int
               -- ^ retry count
-              -> (Payload -> IO a)
+              -> (Payload a -> IO b)
               -- ^ payload processing function
-              -> Session (Either SomeException (Maybe a))
-withPayloadDB retryCount f = getEnqueue >>= \case
+              -> Session (Either SomeException (Maybe b))
+withPayloadDB decoder retryCount f = getEnqueue decoder >>= \case
   Nothing -> pure (Right Nothing)
   Just payload@Payload {..} -> fmap Just <$> do
     setDequeued pId
@@ -361,16 +364,17 @@ from the payload ingesting function.
 
 -}
 withPayload :: Connection
+            -> D.Value a
             -> Int
             -- ^ retry count
-            -> (Payload -> IO a)
-            -> IO (Either SomeException a)
-withPayload conn retryCount f = bracket_
+            -> (Payload a -> IO b)
+            -> IO (Either SomeException b)
+withPayload conn decoder retryCount f = bracket_
   (execute conn $ "LISTEN " <> notifyName)
   (execute conn $ "UNLISTEN " <> notifyName)
   $ fix
   $ \continue ->
-    run (transaction $ withPayloadDB retryCount f) conn >>= \case
+    run (transaction $ withPayloadDB decoder retryCount f) conn >>= \case
       Left a -> throwIO $ QueryException a
       Right a -> case a of
         Left x -> return $ Left x
