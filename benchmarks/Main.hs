@@ -15,6 +15,7 @@ import           Control.Concurrent
 import           Control.Monad (replicateM, forever, void)
 import           Hasql.Session
 import           Hasql.Connection
+import           Data.Function
 
 -- TODO need to make sure the number of producers and consumers does not go over the number of connections
 
@@ -61,8 +62,11 @@ main = do
   flip finally printCounters $ withSetup $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
     let totalEnqueueCount = initialDequeueCount + initialEnqueueCount
-        enqueueAction = void $ withResource pool $ \conn -> enqueue conn payload
-        dequeueAction = void $ withResource pool $ dequeue
+        enqueueAction = void $ withResource pool $ \conn -> enqueueNoNotify conn payload
+        dequeueAction = void $ withResource pool $ \conn -> fix $ \next -> do
+          tryDequeue conn >>= \case
+            Nothing -> next
+            Just _ -> pure ()
 
     replicateConcurrently_ totalEnqueueCount enqueueAction
     replicateConcurrently_ initialDequeueCount dequeueAction

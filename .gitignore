@@ -60,4 +60,4 @@ core/
 .test-cache
 /postgresql-simple-queue.cabal
 dist-newstyle
-
+perf.script
