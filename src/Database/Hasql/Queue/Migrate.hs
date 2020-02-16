@@ -16,12 +16,10 @@ migrationQueryString = [here|
     END IF;
   END$$;
 
-
   CREATE SEQUENCE IF NOT EXISTS modified_index START 1;
 
   CREATE TABLE IF NOT EXISTS payloads
   ( id BIGSERIAL PRIMARY KEY
-  , value jsonb NOT NULL
   , attempts int NOT NULL DEFAULT 0
   , state state_t NOT NULL DEFAULT 'enqueued'
   , modified_at int8 NOT NULL DEFAULT nextval('modified_index')
@@ -30,10 +28,12 @@ migrationQueryString = [here|
   CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at)
     WHERE (state = 'enqueued');
 
-
-
 |]
 
+intPayloadMigration :: String
+intPayloadMigration = [here|
+    ALTER TABLE payloads ADD COLUMN  IF NOT EXISTS value int4 NOT NULL;
+  |]
 
 {-| This function creates a table and enumeration type that is
     appriopiate for the queue. The following sql is used.
@@ -67,5 +67,7 @@ migrationQueryString = [here|
  @
 
 -}
-migrate :: Connection -> IO ()
-migrate conn = void $ run (sql $ fromString migrationQueryString) conn
+
+migrate :: Connection -> String -> IO ()
+migrate conn alter = void $
+  run (sql $ fromString $ migrationQueryString <> alter) conn

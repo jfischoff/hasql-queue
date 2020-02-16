@@ -16,6 +16,9 @@ import           Control.Monad (replicateM, forever, void)
 import           Hasql.Session
 import           Hasql.Connection
 import           Data.Function
+import qualified Hasql.Encoders as E
+import qualified Hasql.Decoders as D
+import           Data.Int
 
 -- TODO need to make sure the number of producers and consumers does not go over the number of connections
 
@@ -34,7 +37,9 @@ withSetup f = do
     --let combinedConfig = autoExplainConfig 15 <> cacheConfig dbCache
     let combinedConfig = defaultConfig <> cacheConfig dbCache
     migratedConfig <- throwE $ cacheAction (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
-        $ BSC.pack migrationQueryString) (flip withConn migrate) combinedConfig
+        $ BSC.pack $ migrationQueryString <> intPayloadMigration)
+        (flip withConn $ flip migrate intPayloadMigration)
+        combinedConfig
     withConfig migratedConfig $ \db -> do
       print $ toConnectionString db
 
@@ -42,8 +47,8 @@ withSetup f = do
               (either (throwIO . userError . show) pure =<< acquire (toConnectionString db)
               ) release 2 60 49
 
-payload :: Value
-payload = toJSON 'a'
+payload :: Int32
+payload = 1
 
 main :: IO ()
 main = do
@@ -62,9 +67,9 @@ main = do
   flip finally printCounters $ withSetup $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
     let totalEnqueueCount = initialDequeueCount + initialEnqueueCount
-        enqueueAction = void $ withResource pool $ \conn -> enqueueNoNotify conn payload
+        enqueueAction = void $ withResource pool $ \conn -> enqueueNoNotify conn E.int4 payload
         dequeueAction = void $ withResource pool $ \conn -> fix $ \next -> do
-          tryDequeue conn >>= \case
+          tryDequeue conn D.int4 >>= \case
             Nothing -> next
             Just _ -> pure ()
 
