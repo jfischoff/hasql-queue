@@ -216,7 +216,7 @@ dequeueDB valueDecoder = do
             FOR UPDATE SKIP LOCKED
             LIMIT 1
           )
-        RETURNING id, value, state, attempts, modified_at
+        RETURNING id, state, attempts, modified_at, value
         |]
       encoder = mempty
       decoder = D.rowMaybe (payloadDecoder valueDecoder)
