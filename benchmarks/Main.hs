@@ -78,6 +78,7 @@ main = do
     withResource pool $ \conn -> void $ run (sql "VACUUM FULL ANALYZE") conn
     putStrLn "Finished VACUUM FULL ANALYZE"
     -- forever $ threadDelay 1000000000
+    getLine
 
     let enqueueLoop = forever $ do
           enqueueAction
