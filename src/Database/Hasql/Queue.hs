@@ -58,7 +58,10 @@ module Database.Hasql.Queue
   , Payload (..)
   , payloadDecoder
   , enqueue
+  , enqueueNoNotify
+  , enqueueNoNotifyDB
   , dequeue
+  , tryDequeue
   , enqueueDB
   , dequeueDB
   , getCount
@@ -159,6 +162,25 @@ payloadDecoder
   <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
   <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
 
+-- TODO make an `enqueueNoNotifyDB`
+enqueueNoNotifyDB :: Value -> Session PayloadId
+enqueueNoNotifyDB value = do
+  let theQuery = [here|
+        INSERT INTO payloads (attempts, value)
+        VALUES (0, $1)
+        RETURNING id
+        |]
+      theStatement = Statement theQuery encoder decoder True
+      encoder = E.param $ E.nonNullable E.jsonb
+      decoder = D.singleRow (D.column (D.nonNullable payloadIdDecoder))
+
+  statement value theStatement
+
+enqueueNoNotify :: Connection -> Value -> IO PayloadId
+enqueueNoNotify conn val = either (throwIO . userError . show) pure
+  =<< run (transaction $ enqueueNoNotifyDB val) conn
+
+
 {-| Enqueue a new JSON value into the queue. This particularly function
     can be composed as part of a larger database transaction. For instance,
     a single transaction could create a user and enqueue a email message.
@@ -171,17 +193,8 @@ payloadDecoder
 -}
 enqueueDB :: Value -> Session PayloadId
 enqueueDB value = do
-  let theQuery = [here|
-        INSERT INTO payloads (attempts, value)
-        VALUES (0, $1)
-        RETURNING id
-        |]
-      theStatement = Statement theQuery encoder decoder True
-      encoder = E.param $ E.nonNullable E.jsonb
-      decoder = D.singleRow (D.column (D.nonNullable payloadIdDecoder))
-
   sql "NOTIFY postgresql_simple_enqueue"
-  statement value theStatement
+  enqueueNoNotifyDB value
 
 {-| Enqueue a new JSON value into the queue. See 'enqueueDB' for a version
     which can be composed with other queries in a single transaction.
