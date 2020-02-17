@@ -73,7 +73,7 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
         (verboseConfig <> cacheConfig dbCache)
   withConfig migratedConfig $ \db -> do
     f =<< createPool
-      (either (throwIO . userError . show) pure =<< acquire (toConnectionString db))
+      ((\c -> run (setup "int4") c >> pure c) =<< either (throwIO . userError . show) pure =<< acquire (toConnectionString db))
       release
       2
       60

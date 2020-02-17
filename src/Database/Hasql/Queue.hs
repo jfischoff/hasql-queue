@@ -69,10 +69,12 @@ module Database.Hasql.Queue
   , withPayloadDB
   , withPayload
   , execute
+  , setup
   -- * Session API
   ) where
 
 import           Data.String.Here.Uninterpolated
+import           Data.String.Here.Interpolated
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Hasql.Connection
@@ -101,6 +103,14 @@ import           Data.Typeable
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
+setup :: String -> Session ()
+setup valueType = sql [i|
+  PREPARE enqueue AS
+    INSERT INTO payloads (attempts, value)
+    VALUES (0, $1)
+    RETURNING id;
+|]
+
 -- TODO remove
 newtype QueryException = QueryException QueryError
   deriving (Eq, Show, Typeable)
@@ -164,11 +174,7 @@ payloadDecoder thePayloadDecoder
 -- TODO make an `enqueueNoNotifyDB`
 enqueueNoNotifyDB :: E.Value a -> a -> Session PayloadId
 enqueueNoNotifyDB theEncoder value = do
-  let theQuery = [here|
-        INSERT INTO payloads (attempts, value)
-        VALUES (0, $1)
-        RETURNING id
-        |]
+  let theQuery = "EXECUTE enqueue($1)"
       theStatement = Statement theQuery encoder decoder True
       encoder = E.param $ E.nonNullable theEncoder
       decoder = D.singleRow (D.column (D.nonNullable payloadIdDecoder))
