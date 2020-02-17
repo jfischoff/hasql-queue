@@ -59,9 +59,11 @@ module Database.Hasql.Queue
   , payloadDecoder
   , enqueue
   , enqueueNoNotify
+  , enqueueNoNotify_
   , enqueueNoNotifyDB
   , dequeue
   , tryDequeue
+  , tryDequeueValue
   , enqueueDB
   , dequeueDB
   , getCount
@@ -162,6 +164,19 @@ payloadDecoder thePayloadDecoder
   <*> D.column (D.nonNullable thePayloadDecoder)
 
 -- TODO make an `enqueueNoNotifyDB`
+enqueueNoNotifyDB_ :: E.Value a -> a -> Session ()
+enqueueNoNotifyDB_ theEncoder value = do
+  let theQuery = [here|
+        INSERT INTO payloads (attempts, value)
+        VALUES (0, $1)
+        |]
+      theStatement = Statement theQuery encoder decoder True
+      encoder = E.param $ E.nonNullable theEncoder
+      decoder = D.noResult
+
+  statement value theStatement
+
+-- TODO make an `enqueueNoNotifyDB`
 enqueueNoNotifyDB :: E.Value a -> a -> Session PayloadId
 enqueueNoNotifyDB theEncoder value = do
   let theQuery = [here|
@@ -179,6 +194,9 @@ enqueueNoNotify :: Connection -> E.Value a -> a -> IO PayloadId
 enqueueNoNotify conn theEncoder val = either (throwIO . userError . show) pure
   =<< run (transaction $ enqueueNoNotifyDB theEncoder val) conn
 
+enqueueNoNotify_ :: Connection -> E.Value a -> a -> IO ()
+enqueueNoNotify_ conn theEncoder val = either (throwIO . userError . show) pure
+  =<< run (transaction $ enqueueNoNotifyDB_ theEncoder val) conn
 
 {-| Enqueue a new JSON value into the queue. This particularly function
     can be composed as part of a larger database transaction. For instance,
@@ -223,6 +241,27 @@ dequeueDB valueDecoder = do
       theStatement = Statement theQuery encoder decoder True
   statement () theStatement
 
+
+dequeueValueDB :: D.Value a -> Session (Maybe a)
+dequeueValueDB valueDecoder = do
+  let theQuery = [here|
+        UPDATE payloads
+        SET state='dequeued'
+        WHERE id in
+          ( SELECT p1.id
+            FROM payloads AS p1
+            WHERE p1.state='enqueued'
+            ORDER BY p1.modified_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+        RETURNING value
+        |]
+      encoder = mempty
+      decoder = D.rowMaybe $ D.column $ D.nonNullable valueDecoder
+      theStatement = Statement theQuery encoder decoder True
+  statement () theStatement
+
 {-| Return a the oldest 'Payload' in the 'Enqueued' state or 'Nothing'
     if there are no payloads. For a blocking version utilizing PostgreSQL's
     NOTIFY and LISTEN, see 'dequeue'. This functions runs 'dequeueDb' as a
@@ -235,6 +274,11 @@ tryDequeue :: Connection -> D.Value a -> IO (Maybe (Payload a))
 tryDequeue conn decoder =
   either (throwIO . userError . show) pure
     =<< run (transaction $ dequeueDB decoder) conn
+
+tryDequeueValue :: Connection -> D.Value a -> IO (Maybe a)
+tryDequeueValue conn decoder =
+  either (throwIO . userError . show) pure
+    =<< run (transaction $ dequeueValueDB decoder) conn
 
 notifyName :: IsString s => s
 notifyName = fromString "postgresql_simple_enqueue"
