@@ -34,7 +34,14 @@ withSetup f = do
 
   throwE $ withDbCache $ \dbCache -> do
     --let combinedConfig = autoExplainConfig 15 <> cacheConfig dbCache
-    let combinedConfig = defaultConfig <> cacheConfig dbCache
+    let combinedConfig = defaultConfig <> cacheConfig dbCache <> mempty
+          { postgresConfigFile =
+              [ ("commit_siblings", "5")
+              --, ("wal_writer_flush_after", "10MB")
+              --, ("wal_writer_delay", "1000ms")
+              -- , ("wal_buffers", "16MB")
+              ]
+          }
     migratedConfig <- throwE $ cacheAction (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
         $ BSC.pack $ migrationQueryString <> intPayloadMigration)
         (flip withConn $ flip migrate intPayloadMigration)
