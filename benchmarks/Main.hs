@@ -66,9 +66,9 @@ main = do
   flip finally printCounters $ withSetup $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
     let totalEnqueueCount = initialDequeueCount + initialEnqueueCount
-        enqueueAction = void $ withResource pool $ \conn -> enqueueNoNotify conn E.int4 payload
+        enqueueAction = void $ withResource pool $ \conn -> enqueueNoNotify_ conn E.int4 payload
         dequeueAction = void $ withResource pool $ \conn -> fix $ \next -> do
-          tryDequeue conn D.int4 >>= \case
+          tryDequeueValue conn D.int4 >>= \case
             Nothing -> next
             Just _ -> pure ()
 
