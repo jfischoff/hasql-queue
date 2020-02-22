@@ -61,11 +61,14 @@ module Database.Hasql.Queue
   , enqueueNoNotify
   , enqueueNoNotify_
   , enqueueNoNotifyDB
+  , enqueueNoNotifyDB_
   , dequeue
   , tryDequeue
   , tryDequeueValue
+  , tryDequeueManyValues
   , enqueueDB
   , dequeueDB
+  , dequeueValueDB
   , getCount
   , getCountDB
   , withPayloadDB
@@ -241,6 +244,45 @@ dequeueDB valueDecoder = do
       theStatement = Statement theQuery encoder decoder True
   statement () theStatement
 
+dequeueManyDB :: D.Value a -> Int -> Session [Payload a]
+dequeueManyDB valueDecoder count = do
+  let theQuery = [here|
+      UPDATE payloads
+      SET state='dequeued'
+      WHERE id in
+        ( SELECT p1.id
+          FROM payloads AS p1
+          WHERE p1.state='enqueued'
+          ORDER BY p1.modified_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT $1
+        )
+      RETURNING id, state, attempts, modified_at, value
+      |]
+      encoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
+      decoder = D.rowList $ payloadDecoder valueDecoder
+      theStatement = Statement theQuery encoder decoder True
+  statement count theStatement
+
+dequeueManyValuesDB :: D.Value a -> Int -> Session [a]
+dequeueManyValuesDB valueDecoder count = do
+  let theQuery = [here|
+      UPDATE payloads
+      SET state='dequeued'
+      WHERE id in
+        ( SELECT p1.id
+          FROM payloads AS p1
+          WHERE p1.state='enqueued'
+          ORDER BY p1.modified_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT $1
+        )
+      RETURNING value
+      |]
+      encoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
+      decoder = D.rowList $ D.column $ D.nonNullable valueDecoder
+      theStatement = Statement theQuery encoder decoder True
+  statement count theStatement
 
 dequeueValueDB :: D.Value a -> Session (Maybe a)
 dequeueValueDB valueDecoder = do
@@ -280,6 +322,16 @@ tryDequeueValue conn decoder =
   either (throwIO . userError . show) pure
     =<< run (transaction $ dequeueValueDB decoder) conn
 
+tryDequeueMany :: Connection -> D.Value a -> Int -> IO [Payload a]
+tryDequeueMany conn decoder count =
+  either (throwIO . userError . show) pure
+    =<< run (transaction $ dequeueManyDB decoder count) conn
+
+tryDequeueManyValues :: Connection -> D.Value a -> Int -> IO [a]
+tryDequeueManyValues conn decoder count =
+  either (throwIO . userError . show) pure
+    =<< run (transaction $ dequeueManyValuesDB decoder count) conn
+
 notifyName :: IsString s => s
 notifyName = fromString "postgresql_simple_enqueue"
 
@@ -306,6 +358,20 @@ dequeue conn decoder = bracket_
           continue
         Just x -> return x
 
+-- | Transition a 'Payload' to the 'Dequeued' state. his functions runs
+--   'dequeueDB' as a 'Serializable' transaction.
+-- TODO make NonEmpty
+dequeueMany :: Connection -> D.Value a -> Int -> IO [Payload a]
+dequeueMany conn decoder count = bracket_
+  (execute conn $ "LISTEN " <> notifyName)
+  (execute conn $ "UNLISTEN " <> notifyName)
+  $ fix $ \continue -> do
+      m <- tryDequeueMany conn decoder count
+      case m of
+        [] -> do
+          notifyPayload conn
+          continue
+        xs -> return xs
 
 {-| Get the number of rows in the 'Enqueued' state. This function runs
     'getCountDB' in a 'ReadCommitted' transaction.
@@ -339,6 +405,16 @@ getEnqueue decoder = statement () $ state mempty (D.rowMaybe $ payloadDecoder de
     LIMIT 1;
   |]
 
+getEnqueueMany :: D.Value a -> Int -> Session [Payload a]
+getEnqueueMany decoder count = statement (fromIntegral count) $
+  state (E.param $ E.nonNullable E.int4) (D.rowList $ payloadDecoder decoder) [here|
+    SELECT id, state, attempts, modified_at, value
+    FROM payloads
+    WHERE state='enqueued'
+    ORDER BY modified_at ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT $1;
+  |]
 
 setDequeued :: PayloadId -> Session ()
 setDequeued thePid = statement thePid $ state (E.param (E.nonNullable payloadIdEncoder)) D.noResult [here|
@@ -426,25 +502,3 @@ withPayload conn decoder retryCount f = bracket_
           notifyPayload conn
           continue
         Right (Just x) -> return $ Right x
-
-{-
-
-
--------------------------------------------------------------------------------
----  Session API
--------------------------------------------------------------------------------
-
-
-
--- | Transition a 'Payload' to the 'Dequeued' state.
-
-
-
-
-
-
--------------------------------------------------------------------------------
----  IO API
--------------------------------------------------------------------------------
-
--}

@@ -1,1 +1,1 @@
-ghcid -c 'stack ghci hasql-queue:lib hasql-queue:exe:benchmark' --test=:main --restart=package.yaml --restart=stack.yaml
+ghcid -c 'stack ghci hasql-queue:lib hasql-queue:exe:benchmark' --restart=package.yaml --restart=stack.yaml

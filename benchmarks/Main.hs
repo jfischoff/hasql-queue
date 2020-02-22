@@ -17,6 +17,7 @@ import           Hasql.Connection
 import           Data.Function
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
+import           Hasql.Statement
 import           Data.Int
 
 -- TODO need to make sure the number of producers and consumers does not go over the number of connections
@@ -51,7 +52,7 @@ payload = 1
 
 main :: IO ()
 main = do
-  [producerCount, consumerCount, time, initialDequeueCount, initialEnqueueCount] <- map read <$> getArgs
+  [producerCount, consumerCount, time, initialDequeueCount, initialEnqueueCount, batchCount] <- map read <$> getArgs
   -- create a temporary database
   enqueueCounter <- newIORef (0 :: Int)
   dequeueCounter <- newIORef (0 :: Int)
@@ -67,13 +68,25 @@ main = do
     -- enqueue the enqueueCount + dequeueCount
     let totalEnqueueCount = initialDequeueCount + initialEnqueueCount
         enqueueAction = void $ withResource pool $ \conn -> enqueueNoNotify_ conn E.int4 payload
-        dequeueAction = void $ withResource pool $ \conn -> fix $ \next -> do
-          tryDequeueValue conn D.int4 >>= \case
+        dequeueAction = void $ withResource pool $ \conn -> fix $ \next -> case batchCount of
+          0 -> tryDequeueValue conn D.int4 >>= \case
             Nothing -> next
             Just _ -> pure ()
+          theBatchCount -> tryDequeueManyValues conn D.int4 theBatchCount >>= \case
+            [] -> next
+            _ -> pure ()
 
-    replicateM_ totalEnqueueCount enqueueAction
-    replicateM_ initialDequeueCount dequeueAction
+    let enqueueInsertSql = "INSERT INTO payloads (attempts, value) SELECT 0, g.value FROM generate_series(1, $1) AS g (value)"
+        enqueueInsertStatement =
+          statement (fromIntegral initialEnqueueCount) $ Statement enqueueInsertSql (E.param $ E.nonNullable E.int4) D.noResult False
+
+    withResource pool $ run enqueueInsertStatement
+
+    let dequeueInsertSql = "INSERT INTO payloads (attempts, state, value) SELECT 0, 'dequeued', g.value FROM generate_series(1, $1) AS g (value)"
+        dequeueInsertStatement =
+          statement (fromIntegral initialDequeueCount) $ Statement dequeueInsertSql (E.param $ E.nonNullable E.int4) D.noResult False
+
+    withResource pool $ run dequeueInsertStatement
 
     withResource pool $ \conn -> void $ run (sql "VACUUM FULL ANALYZE") conn
     putStrLn "Finished VACUUM FULL ANALYZE"
