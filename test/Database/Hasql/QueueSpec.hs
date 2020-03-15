@@ -127,7 +127,16 @@ spec = describe "Database.Queue" $ parallel $ do
       firstCount `shouldBe` 1
       secondCount `shouldBe` 0
 
-    it "enqueues_/dequeueValue" $ \pool -> do
+{-
+    it "enqueueNoNotifyDB/dequeueManyValues" $ \pool -> do
+      let initial = 2
+      actual <- runReadCommitted pool $ do
+        enqueueNoNotifyDB E.int4 initial
+        dequeueManyValueDB D.int4
+
+      actual `shouldBe` Just initial
+-}
+    it "enqueueNoNotifyDB_/dequeueValue" $ \pool -> do
       let initial = 2
       actual <- runReadCommitted pool $ do
         enqueueNoNotifyDB_ E.int4 initial
