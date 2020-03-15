@@ -127,6 +127,22 @@ spec = describe "Database.Queue" $ parallel $ do
       firstCount `shouldBe` 1
       secondCount `shouldBe` 0
 
+{-
+    it "enqueueNoNotifyDB/dequeueManyValues" $ \pool -> do
+      let initial = 2
+      actual <- runReadCommitted pool $ do
+        enqueueNoNotifyDB E.int4 initial
+        dequeueManyValueDB D.int4
+
+      actual `shouldBe` Just initial
+-}
+    it "enqueueNoNotifyDB_/dequeueValue" $ \pool -> do
+      let initial = 2
+      actual <- runReadCommitted pool $ do
+        enqueueNoNotifyDB_ E.int4 initial
+        dequeueValueDB D.int4
+
+      actual `shouldBe` Just initial
 
     it "enqueuesDB/withPayloadDB/retries" $ \pool -> do
       (theCount, xs) <- runReadCommitted pool $ do
@@ -220,7 +236,7 @@ spec = describe "Database.Queue" $ parallel $ do
       xs <- atomically $ readTVar ref
       let Just decoded = mapM (decode . encode) xs
       sort decoded `shouldBe` sort expected
-{-
+
   aroundAll withSetup $ describe "basic" $ do
     it "enqueues and dequeues concurrently dequeue" $ \testDB -> do
       let withPool' = flip withConnection testDB
@@ -230,7 +246,7 @@ spec = describe "Database.Queue" $ parallel $ do
       ref <- newTVarIO []
 
       loopThreads <- replicateM 35 $ async $ withPool' $ \c -> fix $ \next -> do
-        Payload {..} <- dequeue c
+        Payload {..} <- dequeue c D.int4
         lastCount <- atomically $ do
           xs <- readTVar ref
           writeTVar ref $ pValue : xs
@@ -239,10 +255,9 @@ spec = describe "Database.Queue" $ parallel $ do
         when (lastCount < elementCount) next
 
       forM_ (chunksOf (elementCount `div` 11) expected) $ \xs -> forkIO $ void $ withPool' $ \c ->
-         forM_ xs $ \i -> enqueue c $ toJSON i
+         forM_ xs $ \i -> enqueue c E.int4 $ fromIntegral i
 
       waitAnyCancel loopThreads
       xs <- atomically $ readTVar ref
       let Just decoded = mapM (decode . encode) xs
       sort decoded `shouldBe` sort expected
--}
