@@ -68,6 +68,8 @@ default-extensions:
 - LambdaCase
 - RecordWildCards
 - TupleSections
+- GeneralizedNewtypeDeriving
+- QuasiQuotes
 
 dependencies:
 - base >=4.7 && <5

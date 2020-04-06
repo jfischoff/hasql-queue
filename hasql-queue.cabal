@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d7997fe1ff958bde5f08be087097b883fb10de79b2a22537d738aa0729fb1dfb
+-- hash: 1e9ec7d7df46e8c8ec51de5b35cf209b1ae78d585ea432950252117fb95ea8e9
 
 name:           hasql-queue
 version:        1.0.1
@@ -57,10 +57,12 @@ library
       Database.Hasql.Queue
       Database.Hasql.Queue.Migrate
   other-modules:
+      Database.Hasql.Queue.Internal
+      Database.Hasql.Queue.Session
       Paths_hasql_queue
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes
   ghc-options: -Wno-unused-do-bind
   build-depends:
       aeson
@@ -84,7 +86,7 @@ executable benchmark
       Paths_hasql_queue
   hs-source-dirs:
       benchmarks
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes
   ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N -g2
   build-depends:
       aeson
@@ -115,7 +117,7 @@ test-suite unit-tests
       Paths_hasql_queue
   hs-source-dirs:
       test
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes
   ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
