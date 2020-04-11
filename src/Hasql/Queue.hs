@@ -47,7 +47,7 @@ use cases.
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE OverloadedStrings          #-}
-module Database.Hasql.Queue
+module Hasql.Queue
   ( -- * Types
     PayloadId (..)
   , payloadIdDecoder

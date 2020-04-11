@@ -1,6 +1,6 @@
 {-# OPTIONS_HADDOCK prune #-}
 {-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
-module Database.Hasql.Queue.Migrate where
+module Hasql.Queue.Migrate where
 import           Control.Monad
 import           Data.String
 import           Data.String.Here.Uninterpolated

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1e9ec7d7df46e8c8ec51de5b35cf209b1ae78d585ea432950252117fb95ea8e9
+-- hash: d22e9c056204e7b0bacc9492efea0cebccade99da67ffbf733bb9f3fdfebab17
 
 name:           hasql-queue
 version:        1.0.1
@@ -54,11 +54,11 @@ source-repository head
 
 library
   exposed-modules:
-      Database.Hasql.Queue
-      Database.Hasql.Queue.Migrate
+      Hasql.Queue
+      Hasql.Queue.Migrate
+      Hasql.Queue.Session
+      Hasql.Queue.IO
   other-modules:
-      Database.Hasql.Queue.Internal
-      Database.Hasql.Queue.Session
       Paths_hasql_queue
   hs-source-dirs:
       src

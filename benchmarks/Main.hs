@@ -1,7 +1,7 @@
 module Main where
 import System.Environment
-import Database.Hasql.Queue
-import Database.Hasql.Queue.Migrate
+import Hasql.Queue
+import Hasql.Queue.Migrate
 import Data.Aeson
 import Data.IORef
 import Control.Exception
