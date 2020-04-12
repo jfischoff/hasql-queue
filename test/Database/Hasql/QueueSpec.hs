@@ -27,7 +27,6 @@ import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Char8 as BSC
 import           Hasql.Connection
 import           Hasql.Session
-import           Data.Typeable
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 
@@ -232,7 +231,7 @@ spec = describe "Database.Queue" $ parallel $ do
       forM_ (chunksOf (elementCount `div` 11) expected) $ \xs -> forkIO $ void $ withPool' $ \c ->
          forM_ xs $ \i -> enqueue c E.int4 $ fromIntegral i
 
-      waitAnyCancel loopThreads
+      _ <- waitAnyCancel loopThreads
       xs <- atomically $ readTVar ref
       let Just decoded = mapM (decode . encode) xs
       sort decoded `shouldBe` sort expected
@@ -257,7 +256,7 @@ spec = describe "Database.Queue" $ parallel $ do
       forM_ (chunksOf (elementCount `div` 11) expected) $ \xs -> forkIO $ void $ withPool' $ \c ->
          forM_ xs $ \i -> enqueue c E.int4 $ fromIntegral i
 
-      waitAnyCancel loopThreads
+      _ <- waitAnyCancel loopThreads
       xs <- atomically $ readTVar ref
       let Just decoded = mapM (decode . encode) xs
       sort decoded `shouldBe` sort expected

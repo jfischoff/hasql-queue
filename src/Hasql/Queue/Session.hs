@@ -1,8 +1,6 @@
 module Hasql.Queue.Session where
-import           Hasql.Connection
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
-import           Hasql.Session
 import           Hasql.Session
 import           Data.Int
 import           Data.Functor.Contravariant

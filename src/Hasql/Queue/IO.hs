@@ -10,7 +10,6 @@ import           Data.ByteString (ByteString)
 import           Data.Typeable
 import           Data.Function
 import           Data.String
-import qualified Hasql.Queue.Session as S
 import           Hasql.Notification
 import           Control.Monad
 
@@ -21,39 +20,13 @@ import           Control.Monad
 newtype QueryException = QueryException QueryError
   deriving (Eq, Show, Typeable)
 
-queryErrorToSomeException :: QueryError -> SomeException
-queryErrorToSomeException = toException . QueryException
-
 instance Exception QueryException
 
+runThrow :: Session a -> Connection -> IO a
+runThrow sess conn = either (throwIO . QueryException) pure =<< run sess conn
+
 execute :: Connection -> ByteString -> IO ()
-execute conn theSql = either (throwIO . userError . show) pure =<< run (sql theSql) conn
-
-enque :: Connection -> E.Value a -> [a] -> IO [PayloadId]
-enque = undefined
-
-enque_ :: Connection -> E.Value a -> [a] -> IO ()
-enque_ = undefined
-
-dequeue :: Connection -> D.Value a -> Int -> IO [Payload a]
-dequeue = undefined
-
-dequeueValues :: Connection -> D.Value a -> Int -> IO [a]
-dequeueValues = undefined
-
-transaction :: Session a -> Session a
-transaction inner = do
-  sql "BEGIN"
-  r <- inner
-  sql "COMMIT"
-  pure r
-
-joinLeft :: Either a (Either a b) -> Either a b
-joinLeft = \case
-  Left x -> Left x
-  Right x -> case x of
-    Left y -> Left y
-    Right y -> Right y
+execute conn theSql = runThrow (sql theSql) conn
 
 notifyName :: IsString s => s
 notifyName = fromString "postgresql_simple_enqueue"
@@ -63,6 +36,45 @@ notifyPayload :: Connection -> IO ()
 notifyPayload conn = do
   Notification {..} <- either throwIO pure =<< getNotification conn
   unless (notificationChannel == notifyName) $ notifyPayload conn
+
+transaction :: Session a -> Session a
+transaction inner = do
+  sql "BEGIN"
+  r <- inner
+  sql "COMMIT"
+  pure r
+
+withNotify :: Connection -> Session a -> (a -> Maybe b) -> IO b
+withNotify conn action theCast = bracket_
+  (execute conn $ "LISTEN " <> notifyName)
+  (execute conn $ "UNLISTEN " <> notifyName)
+  $ fix
+  $ \continue -> do
+      x <- runThrow (transaction action) conn
+      case theCast x of
+        Nothing -> do
+          notifyPayload conn
+          continue
+        Just xs -> pure xs
+
+enqueue :: Connection -> E.Value a -> [a] -> IO [PayloadId]
+enqueue conn encoder xs = runThrow (S.enqueueNotify encoder xs) conn
+
+enqueue_ :: Connection -> E.Value a -> [a] -> IO ()
+enqueue_ conn encoder xs = runThrow (S.enqueueNotify_ encoder xs) conn
+
+nonEmpty :: [a] -> Maybe [a]
+nonEmpty = \case
+  [] -> Nothing
+  ys -> pure ys
+
+-- TODO Handle >= 0
+-- Should this return nonEmpty?
+dequeue :: Connection -> D.Value a -> Int -> IO [Payload a]
+dequeue conn decoder count = withNotify conn (S.dequeue decoder count) nonEmpty
+
+dequeueValues :: Connection -> D.Value a -> Int -> IO [a]
+dequeueValues conn decoder count = withNotify conn (S.dequeueValues decoder count) nonEmpty
 
 {-|
 
@@ -78,16 +90,4 @@ withPayload :: Connection
             -- ^ retry count
             -> (Payload a -> IO b)
             -> IO (Either SomeException b)
-withPayload conn decoder retryCount f = bracket_
-  (execute conn $ "LISTEN " <> notifyName)
-  (execute conn $ "UNLISTEN " <> notifyName)
-  $ fix
-  $ \continue ->
-    run (transaction $ S.withPayload decoder retryCount f) conn >>= \case
-      Left a -> throwIO $ QueryException a
-      Right a -> case a of
-        Left x -> return $ Left x
-        Right Nothing -> do
-          notifyPayload conn
-          continue
-        Right (Just x) -> return $ Right x
+withPayload conn decoder retryCount f = withNotify conn (S.withPayload decoder retryCount f) sequenceA

@@ -63,8 +63,10 @@ module Hasql.Queue
   , enqueueNoNotifyDB
   , enqueueNoNotifyDB_
   , dequeue
+  , dequeueMany
   , tryDequeue
   , tryDequeueValue
+  , tryDequeueMany
   , tryDequeueManyValues
   , enqueueDB
   , dequeueDB
@@ -83,9 +85,7 @@ import qualified Hasql.Decoders as D
 import           Hasql.Connection
 import           Hasql.Statement
 import           Hasql.Session
-import           Data.Time
 import           Data.Int
-import           Data.Aeson
 import           Data.Functor.Contravariant
 import           Control.Exception
 import           Hasql.Notification
@@ -94,13 +94,8 @@ import           Control.Monad (unless)
 import           Data.ByteString (ByteString)
 import           Data.Function
 import           Data.Bitraversable
-import           Data.Traversable
 import           Data.Bifunctor
 import           Control.Monad.IO.Class
-import           Control.Monad ((<=<))
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Maybe
-import           Control.Monad.Trans.Except
 import           Data.Typeable
 
 -------------------------------------------------------------------------------
@@ -109,9 +104,6 @@ import           Data.Typeable
 -- TODO remove
 newtype QueryException = QueryException QueryError
   deriving (Eq, Show, Typeable)
-
-queryErrorToSomeException :: QueryError -> SomeException
-queryErrorToSomeException = toException . QueryException
 
 instance Exception QueryException
 
@@ -405,17 +397,6 @@ getEnqueue decoder = statement () $ state mempty (D.rowMaybe $ payloadDecoder de
     LIMIT 1;
   |]
 
-getEnqueueMany :: D.Value a -> Int -> Session [Payload a]
-getEnqueueMany decoder count = statement (fromIntegral count) $
-  state (E.param $ E.nonNullable E.int4) (D.rowList $ payloadDecoder decoder) [here|
-    SELECT id, state, attempts, modified_at, value
-    FROM payloads
-    WHERE state='enqueued'
-    ORDER BY modified_at ASC
-    FOR UPDATE SKIP LOCKED
-    LIMIT $1;
-  |]
-
 setDequeued :: PayloadId -> Session ()
 setDequeued thePid = statement thePid $ state (E.param (E.nonNullable payloadIdEncoder)) D.noResult [here|
     UPDATE payloads SET state='dequeued' WHERE id = $1
@@ -467,13 +448,6 @@ transaction inner = do
   r <- inner
   sql "COMMIT"
   pure r
-
-joinLeft :: Either a (Either a b) -> Either a b
-joinLeft = \case
-  Left x -> Left x
-  Right x -> case x of
-    Left y -> Left y
-    Right y -> Right y
 
 {-|
 
