@@ -67,8 +67,8 @@ payloadIdDecoder = PayloadId <$> D.int8
 payloadIdRow :: D.Row PayloadId
 payloadIdRow = D.column (D.nonNullable payloadIdDecoder)
 
-enque :: E.Value a -> [a] -> Session [PayloadId]
-enque theEncoder values = do
+enqueue :: E.Value a -> [a] -> Session [PayloadId]
+enqueue theEncoder values = do
   let theQuery = [here|
         INSERT INTO payloads (attempts, value)
         SELECT 0, * FROM unnest($1)
@@ -80,8 +80,8 @@ enque theEncoder values = do
 
   statement values theStatement
 
-enque_ :: E.Value a -> [a] -> Session ()
-enque_ theEncoder values = do
+enqueue_ :: E.Value a -> [a] -> Session ()
+enqueue_ theEncoder values = do
   let theQuery = [here|
         INSERT INTO payloads (attempts, value)
         SELECT 0, * FROM unnest($1)
@@ -95,12 +95,12 @@ enque_ theEncoder values = do
 enqueueNotify :: E.Value a -> [a] -> Session [PayloadId]
 enqueueNotify theEncoder values = do
   sql "NOTIFY postgresql_simple_enqueue"
-  enque theEncoder values
+  enqueue theEncoder values
 
 enqueueNotify_ :: E.Value a -> [a] -> Session ()
 enqueueNotify_ theEncoder values = do
   sql "NOTIFY postgresql_simple_enqueue"
-  enque_ theEncoder values
+  enqueue_ theEncoder values
 
 dequeue :: D.Value a -> Int -> Session [Payload a]
 dequeue valueDecoder count = do
@@ -185,3 +185,15 @@ withPayload decoder retryCount f = getEnqueue decoder >>= \case
     bisequenceA
       .   bimap (\e -> updateStateOnFailure >> return e) pure
       =<< liftIO (try $ f payload)
+
+-- | Get the number of rows in the 'Enqueued' state.
+getCount :: Session Int64
+getCount = do
+  let decoder = D.singleRow (D.column (D.nonNullable D.int8))
+      theSql = [here|
+            SELECT count(*)
+            FROM payloads
+            WHERE state='enqueued';
+        |]
+      theStatement = Statement theSql mempty decoder True
+  statement () theStatement

@@ -1,6 +1,19 @@
-module Hasql.Queue.IO where
+module Hasql.Queue.IO
+  ( notifyPayload
+  , withNotify
+  , enqueue
+  , enqueue_
+  , dequeue
+  , dequeueValues
+  , withPayload
+  , getCount
+  , S.Payload (..)
+  , S.PayloadId (..)
+  , QueryException (..)
+  , S.State(..)
+  ) where
 
-import           Hasql.Queue.Session as S
+import qualified Hasql.Queue.Session as S
 import           Hasql.Connection
 import           Hasql.Session
 import qualified Hasql.Encoders as E
@@ -12,6 +25,7 @@ import           Data.Function
 import           Data.String
 import           Hasql.Notification
 import           Control.Monad
+import           Data.Int
 
 -------------------------------------------------------------------------------
 ---  Types
@@ -57,7 +71,7 @@ withNotify conn action theCast = bracket_
           continue
         Just xs -> pure xs
 
-enqueue :: Connection -> E.Value a -> [a] -> IO [PayloadId]
+enqueue :: Connection -> E.Value a -> [a] -> IO [S.PayloadId]
 enqueue conn encoder xs = runThrow (S.enqueueNotify encoder xs) conn
 
 enqueue_ :: Connection -> E.Value a -> [a] -> IO ()
@@ -70,7 +84,7 @@ nonEmpty = \case
 
 -- TODO Handle >= 0
 -- Should this return nonEmpty?
-dequeue :: Connection -> D.Value a -> Int -> IO [Payload a]
+dequeue :: Connection -> D.Value a -> Int -> IO [S.Payload a]
 dequeue conn decoder count = withNotify conn (S.dequeue decoder count) nonEmpty
 
 dequeueValues :: Connection -> D.Value a -> Int -> IO [a]
@@ -88,6 +102,9 @@ withPayload :: Connection
             -> D.Value a
             -> Int
             -- ^ retry count
-            -> (Payload a -> IO b)
+            -> (S.Payload a -> IO b)
             -> IO (Either SomeException b)
 withPayload conn decoder retryCount f = withNotify conn (S.withPayload decoder retryCount f) sequenceA
+
+getCount :: Connection -> IO Int64
+getCount = runThrow S.getCount

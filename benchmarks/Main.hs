@@ -1,6 +1,6 @@
 module Main where
 import System.Environment
-import Hasql.Queue
+import Hasql.Queue.IO
 import Hasql.Queue.Migrate
 import Data.Aeson
 import Data.IORef
@@ -67,12 +67,12 @@ main = do
   flip finally printCounters $ withSetup $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
     let totalEnqueueCount = initialDequeueCount + initialEnqueueCount
-        enqueueAction = void $ withResource pool $ \conn -> enqueueNoNotify_ conn E.int4 payload
+        enqueueAction = void $ withResource pool $ \conn -> enqueue_ conn E.int4 [payload]
         dequeueAction = void $ withResource pool $ \conn -> fix $ \next -> case batchCount of
-          0 -> tryDequeueValue conn D.int4 >>= \case
-            Nothing -> next
-            Just _ -> pure ()
-          theBatchCount -> tryDequeueManyValues conn D.int4 theBatchCount >>= \case
+          0 -> dequeueValues conn D.int4 1 >>= \case
+            [] -> next
+            [_] -> pure ()
+          theBatchCount -> dequeueValues conn D.int4 theBatchCount >>= \case
             [] -> next
             _ -> pure ()
 

@@ -1,22 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+module Database.Hasql.Queue.SessionSpec where
 import           Control.Concurrent
-import           Control.Concurrent.STM
 import           Control.Concurrent.Async
 import           Control.Exception as E
 import           Control.Monad
-import           Data.Aeson
-import           Data.Function
 import           Data.IORef
-import           Data.List
-import           Hasql.Queue
+import           Hasql.Queue.Session
 import           Hasql.Queue.Migrate
-import           Test.Hspec                     (SpecWith, Spec, hspec, describe, parallel, it, afterAll, beforeAll, runIO)
+import           Test.Hspec                     (SpecWith, Spec, describe, parallel, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
-import           Data.List.Split
 import           Data.Either
 import           Database.Postgres.Temp as Temp
 import           Data.Pool
@@ -29,9 +25,6 @@ import           Hasql.Connection
 import           Hasql.Session
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
-
-main :: IO ()
-main = hspec spec
 
 aroundAll :: forall a. ((a -> IO ()) -> IO ()) -> SpecWith a -> Spec
 aroundAll withFunc specWith = do
@@ -101,75 +94,66 @@ spec = describe "Database.Queue" $ parallel $ do
       liftIO $ migrate conn intPayloadMigration
 
     it "empty locks nothing" $ \pool -> do
-      runReadCommitted pool (withPayloadDB D.int4 8 return) >>= \case
+      runReadCommitted pool (withPayload D.int4 8 return) >>= \case
         Left err -> fail $ show err
         Right x -> x `shouldBe` Nothing
     it "empty gives count 0" $ \pool ->
-      runReadCommitted pool getCountDB `shouldReturn` 0
+      runReadCommitted pool getCount `shouldReturn` 0
 
-    it "enqueuesDB/withPayloadDB" $ \pool -> do
-      (withPayloadDBResult, firstCount, secondCount) <- runReadCommitted pool $ do
-        payloadId <- enqueueDB E.int4 1
-        firstCount <- getCountDB
-        withPayloadDBResult <- withPayloadDB D.int4 8 (\(Payload {..}) -> do
-            pId `shouldBe` payloadId
+    it "enqueuesDB/withPayload" $ \pool -> do
+      (withPayloadResult, firstCount, secondCount) <- runReadCommitted pool $ do
+        payloadId <- enqueueNotify E.int4 [1]
+        firstCount <- getCount
+        withPayloadResult <- withPayload D.int4 8 (\(Payload {..}) -> do
+            [pId] `shouldBe` payloadId
             pValue `shouldBe` 1
           )
 
-        secondCount <- getCountDB
-        pure (withPayloadDBResult, firstCount, secondCount)
+        secondCount <- getCount
+        pure (withPayloadResult, firstCount, secondCount)
 
-      case withPayloadDBResult of
-        Left err -> fail $ "withPayloadDB failed with: " <> show err
+      case withPayloadResult of
+        Left err -> fail $ "withPayload failed with: " <> show err
         Right _ -> pure ()
 
       firstCount `shouldBe` 1
       secondCount `shouldBe` 0
 
-{-
-    it "enqueueNoNotifyDB/dequeueManyValues" $ \pool -> do
-      let initial = 2
-      actual <- runReadCommitted pool $ do
-        enqueueNoNotifyDB E.int4 initial
-        dequeueManyValueDB D.int4
-
-      actual `shouldBe` Just initial
--}
     it "enqueueNoNotifyDB_/dequeueValue" $ \pool -> do
       let initial = 2
       actual <- runReadCommitted pool $ do
-        enqueueNoNotifyDB_ E.int4 initial
-        dequeueValueDB D.int4
+        enqueue_ E.int4 [initial]
+        dequeueValues D.int4 1
 
-      actual `shouldBe` Just initial
+      actual `shouldBe` [initial]
 
-    it "enqueuesDB/withPayloadDB/retries" $ \pool -> do
+    it "enqueuesDB/withPayload/retries" $ \pool -> do
       (theCount, xs) <- runReadCommitted pool $ do
-        void $ enqueueDB E.int4 1
-        theCount <- getCountDB
+        void $ enqueue E.int4 [1]
+        theCount <- getCount
 
-        fmap (theCount,) $ replicateM 7 $ withPayloadDB D.int4 8 (\(Payload {..}) ->
+        fmap (theCount,) $ replicateM 7 $ withPayload D.int4 8 (\(Payload {..}) ->
             throwM $ userError "not enough tries"
           )
 
       theCount `shouldBe` 1
       all isLeft xs `shouldBe` True
 
-      either throwM (const $ pure ()) <=< runReadCommitted pool $ withPayloadDB D.int4 8 (\(Payload {..}) -> do
+      either throwM (const $ pure ()) <=< runReadCommitted pool $ withPayload D.int4 8 (\(Payload {..}) -> do
         pAttempts `shouldBe` 7
         pValue `shouldBe` 1
         )
 
-    it "enqueuesDB/withPayloadDB/timesout" $ \pool -> do
+    it "enqueuesDB/withPayload/timesout" $ \pool -> do
       (firstCount, xs, secondCount) <- runReadCommitted pool $ do
-        void $ enqueueDB E.int4 1
-        firstCount <- getCountDB
+        void $ enqueue E.int4 [1]
+        firstCount <- getCount
 
-        xs <- replicateM 2 $ withPayloadDB D.int4 1 (\(Payload {..}) ->
+        xs <- replicateM 2 $ withPayload D.int4 1 (\(Payload {..}) ->
             throwM $ userError "not enough tries"
           )
 
-        secondCount <- getCountDB
+        secondCount <- getCount
 
         pure (firstCount, xs, secondCount)
 
@@ -180,38 +164,38 @@ spec = describe "Database.Queue" $ parallel $ do
 
     it "selects the oldest first" $ \pool -> do
       (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount) <- runReadCommitted pool $ do
-        payloadId0 <- enqueueDB E.int4 1
+        payloadId0 <- enqueue E.int4 [1]
         liftIO $ threadDelay 100
 
-        payloadId1 <- enqueueDB E.int4 2
+        payloadId1 <- enqueue E.int4 [2]
 
-        firstCount <- getCountDB
+        firstCount <- getCount
 
-        firstWithPayloadResult <- withPayloadDB D.int4 8 (\(Payload {..}) -> do
-            pId `shouldBe` payloadId0
+        firstWithPayloadResult <- withPayload D.int4 8 (\(Payload {..}) -> do
+            [pId] `shouldBe` payloadId0
             pValue `shouldBe` 1
           )
 
-        secondWithPayloadResult <- withPayloadDB D.int4 8 (\(Payload {..}) -> do
-            pId `shouldBe` payloadId1
+        secondWithPayloadResult <- withPayload D.int4 8 (\(Payload {..}) -> do
+            [pId] `shouldBe` payloadId1
             pValue `shouldBe` 2
           )
 
-        secondCount <- getCountDB
+        secondCount <- getCount
         pure (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount)
 
       firstCount `shouldBe` 2
 
       case firstWithPayloadResult of
-        Left err -> fail $ "first withPayloadDB failed with: " <> show err
+        Left err -> fail $ "first withPayload failed with: " <> show err
         Right _ -> pure ()
 
       case secondWithPayloadResult of
-        Left err -> fail $ "second withPayloadDB failed with: " <> show err
+        Left err -> fail $ "second withPayload failed with: " <> show err
         Right _ -> pure ()
 
       secondCount `shouldBe` 0
-
+{-
     it "enqueues and dequeues concurrently withPayload" $ \testDB -> do
       let withPool' = flip withConnection testDB
           elementCount = 1000 :: Int
@@ -260,3 +244,4 @@ spec = describe "Database.Queue" $ parallel $ do
       xs <- atomically $ readTVar ref
       let Just decoded = mapM (decode . encode) xs
       sort decoded `shouldBe` sort expected
+-}
