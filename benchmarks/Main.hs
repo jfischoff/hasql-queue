@@ -68,13 +68,10 @@ main = do
     -- enqueue the enqueueCount + dequeueCount
     let totalEnqueueCount = initialDequeueCount + initialEnqueueCount
         enqueueAction = void $ withResource pool $ \conn -> enqueue_ conn E.int4 [payload]
-        dequeueAction = void $ withResource pool $ \conn -> fix $ \next -> case batchCount of
-          0 -> dequeueValues conn D.int4 1 >>= \case
-            [] -> next
-            [_] -> pure ()
-          theBatchCount -> dequeueValues conn D.int4 theBatchCount >>= \case
-            [] -> next
-            _ -> pure ()
+        dequeueAction = void $ withResource pool $ \conn -> fix $ \next ->
+          dequeueValues conn D.int4 batchCount >>= \case
+              [] -> next
+              _ -> pure ()
 
     let enqueueInsertSql = "INSERT INTO payloads (attempts, value) SELECT 0, g.value FROM generate_series(1, $1) AS g (value)"
         enqueueInsertStatement =
@@ -90,8 +87,6 @@ main = do
 
     withResource pool $ \conn -> void $ run (sql "VACUUM FULL ANALYZE") conn
     putStrLn "Finished VACUUM FULL ANALYZE"
-    -- forever $ threadDelay 1000000000
-    getLine
 
     let enqueueLoop = forever $ do
           enqueueAction

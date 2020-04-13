@@ -104,42 +104,82 @@ enqueueNotify_ theEncoder values = do
 
 dequeue :: D.Value a -> Int -> Session [Payload a]
 dequeue valueDecoder count = do
-  let theQuery = [here|
-      UPDATE payloads
-      SET state='dequeued'
-      WHERE id in
-        ( SELECT p1.id
-          FROM payloads AS p1
-          WHERE p1.state='enqueued'
-          ORDER BY p1.modified_at ASC
-          FOR UPDATE SKIP LOCKED
-          LIMIT $1
-        )
-      RETURNING id, state, attempts, modified_at, value
+  let multipleQuery = [here|
+        UPDATE payloads
+        SET state='dequeued'
+        WHERE id in
+          ( SELECT p1.id
+            FROM payloads AS p1
+            WHERE p1.state='enqueued'
+            ORDER BY p1.modified_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT $1
+          )
+        RETURNING id, state, attempts, modified_at, value
       |]
-      encoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
+      multipleEncoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
+
+      singleQuery = [here|
+        UPDATE payloads
+        SET state='dequeued'
+        WHERE id in
+          ( SELECT p1.id
+            FROM payloads AS p1
+            WHERE p1.state='enqueued'
+            ORDER BY p1.modified_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+        RETURNING id, state, attempts, modified_at, value
+      |]
+
+      singleEncoder = mempty
+
       decoder = D.rowList $ payloadDecoder valueDecoder
-      theStatement = Statement theQuery encoder decoder True
+
+      theStatement = case count of
+        1 -> Statement singleQuery singleEncoder decoder True
+        _ -> Statement multipleQuery multipleEncoder decoder True
   statement count theStatement
 
 dequeueValues :: D.Value a -> Int -> Session [a]
 dequeueValues valueDecoder count = do
-  let theQuery = [here|
-      UPDATE payloads
-      SET state='dequeued'
-      WHERE id in
-        ( SELECT p1.id
-          FROM payloads AS p1
-          WHERE p1.state='enqueued'
-          ORDER BY p1.modified_at ASC
-          FOR UPDATE SKIP LOCKED
-          LIMIT $1
-        )
-      RETURNING value
+  let multipleQuery = [here|
+        UPDATE payloads
+        SET state='dequeued'
+        WHERE id in
+          ( SELECT p1.id
+            FROM payloads AS p1
+            WHERE p1.state='enqueued'
+            ORDER BY p1.modified_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT $1
+          )
+        RETURNING value
       |]
-      encoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
-      decoder = D.rowList $ D.column $ D.nonNullable valueDecoder
-      theStatement = Statement theQuery encoder decoder True
+      multipleEncoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
+
+      singleQuery = [here|
+        UPDATE payloads
+        SET state='dequeued'
+        WHERE id in
+          ( SELECT p1.id
+            FROM payloads AS p1
+            WHERE p1.state='enqueued'
+            ORDER BY p1.modified_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+        RETURNING value
+      |]
+
+      singleEncoder = mempty
+
+      decoder = D.rowList $ D.column $ D.nonNullable $ valueDecoder
+
+      theStatement = case count of
+        1 -> Statement singleQuery singleEncoder decoder True
+        _ -> Statement multipleQuery multipleEncoder decoder True
   statement count theStatement
 
 getEnqueue :: D.Value a -> Session (Maybe (Payload a))
