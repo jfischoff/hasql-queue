@@ -67,6 +67,7 @@ payloadIdDecoder = PayloadId <$> D.int8
 payloadIdRow :: D.Row PayloadId
 payloadIdRow = D.column (D.nonNullable payloadIdDecoder)
 
+-- TODO include special cases for single element insertion
 enqueue :: E.Value a -> [a] -> Session [PayloadId]
 enqueue theEncoder values = do
   let theQuery = [here|
