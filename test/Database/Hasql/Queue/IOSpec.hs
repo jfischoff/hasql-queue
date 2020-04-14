@@ -13,7 +13,8 @@ import           Data.IORef
 import           Data.List
 import           Hasql.Queue.IO
 import           Hasql.Queue.Migrate
-import           Test.Hspec                     (SpecWith, Spec, describe, parallel, it, afterAll, beforeAll, runIO)
+--import           Test.Hspec                     (SpecWith, Spec, describe, parallel, it, afterAll, beforeAll, runIO)
+import           Test.Hspec                     (SpecWith, Spec, describe, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
 import           Control.Monad.Catch
 import           Data.List.Split
@@ -91,8 +92,36 @@ withReadCommitted action pool = do
     either (throwIO . userError . show) pure =<< run wrappedAction conn
 
 spec :: Spec
-spec = describe "Database.Queue" $ parallel $ do
+-- spec = describe "Hasql.Queue.IO" $ parallel $ do
+spec = describe "Hasql.Queue.IO" $ do
   sequential $ aroundAll withSetup $ describe "basic" $ do
+    -- I need to test that enqueue occurs before everything
+    -- enqueue during the Session.dequeue
+    -- After Session.dequeue
+    it "dequeue blocks until something is enqueued: before" $ withConnection $ \conn -> do
+      resultThread <- async $ dequeue conn D.int4 1
+      enqueue_ conn E.int4 [1]
+
+      fmap (fmap pValue) (wait (resultThread)) `shouldReturn` [1]
+
+    it "dequeue blocks until something is enqueued: during" $ withConnection $ \conn -> do
+      E.bracket_ (takeMVar beforeNotify) (tryPutMVar beforeNotify ()) $ do
+        _ <- tryTakeMVar afterAction
+        resultThread <- async $ dequeue conn D.int4 1
+        takeMVar afterAction
+
+        enqueue_ conn E.int4 [1]
+
+        putMVar beforeNotify ()
+
+        fmap (fmap pValue) (wait (resultThread)) `shouldReturn` [1]
+
+    it "dequeue blocks until something is enqueued: after" $ withConnection $ \conn -> do
+      resultThread <- async $ dequeue conn D.int4 1
+      enqueue_ conn E.int4 [1]
+
+      fmap (fmap pValue) (wait (resultThread)) `shouldReturn` [1]
+
     it "enqueues and dequeues concurrently withPayload" $ \testDB -> do
       let withPool' = flip withConnection testDB
           elementCount = 1000 :: Int

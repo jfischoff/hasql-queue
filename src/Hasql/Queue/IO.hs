@@ -3,6 +3,8 @@ module Hasql.Queue.IO
   , withNotify
   , enqueue
   , enqueue_
+  , beforeNotify
+  , afterAction
   , dequeue
   , dequeueValues
   , withPayload
@@ -26,6 +28,8 @@ import           Data.String
 import           Hasql.Notification
 import           Control.Monad
 import           Data.Int
+import           Control.Concurrent
+import           System.IO.Unsafe
 
 -------------------------------------------------------------------------------
 ---  Types
@@ -58,6 +62,14 @@ transaction inner = do
   sql "COMMIT"
   pure r
 
+beforeNotify :: MVar ()
+beforeNotify = unsafePerformIO $ newMVar ()
+{-# NOINLINE beforeNotify #-}
+
+afterAction :: MVar ()
+afterAction = unsafePerformIO newEmptyMVar
+{-# NOINLINE afterAction #-}
+
 withNotify :: Connection -> Session a -> (a -> Maybe b) -> IO b
 withNotify conn action theCast = bracket_
   (execute conn $ "LISTEN " <> notifyName)
@@ -65,8 +77,10 @@ withNotify conn action theCast = bracket_
   $ fix
   $ \continue -> do
       x <- runThrow (transaction action) conn
+      _ <- tryPutMVar afterAction ()
       case theCast x of
         Nothing -> do
+          swapMVar beforeNotify ()
           notifyPayload conn
           continue
         Just xs -> pure xs
