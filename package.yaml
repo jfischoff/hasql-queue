@@ -113,6 +113,7 @@ tests:
 
 executables:
   benchmark:
+    buildable: False
     main: Main.hs
     source-dirs: benchmarks
     ghc-options:
