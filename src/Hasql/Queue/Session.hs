@@ -95,13 +95,14 @@ enqueue_ theEncoder values = do
 
 enqueueNotify :: E.Value a -> [a] -> Session [PayloadId]
 enqueueNotify theEncoder values = do
+  res <- enqueue theEncoder values
   sql "NOTIFY postgresql_simple_enqueue"
-  enqueue theEncoder values
+  pure res
 
 enqueueNotify_ :: E.Value a -> [a] -> Session ()
 enqueueNotify_ theEncoder values = do
-  sql "NOTIFY postgresql_simple_enqueue"
   enqueue_ theEncoder values
+  sql "NOTIFY postgresql_simple_enqueue"
 
 dequeue :: D.Value a -> Int -> Session [Payload a]
 dequeue valueDecoder count = do
@@ -238,3 +239,15 @@ getCount = do
         |]
       theStatement = Statement theSql mempty decoder True
   statement () theStatement
+
+-- | Get the 'Payload' given a 'PayloadId'
+getPayload :: D.Value a -> PayloadId -> Session (Maybe (Payload a))
+getPayload decoder payloadId = do
+  let theQuery = [here|
+    SELECT id, state, attempts, modified_at, value
+    FROM payloads
+    WHERE id = $1
+  |]
+
+      encoder = E.param (E.nonNullable payloadIdEncoder)
+  statement payloadId $ Statement theQuery encoder (D.rowMaybe $ payloadDecoder decoder) True

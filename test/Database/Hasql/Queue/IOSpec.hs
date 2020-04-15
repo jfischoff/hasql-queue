@@ -13,7 +13,6 @@ import           Data.IORef
 import           Data.List
 import           Hasql.Queue.IO
 import           Hasql.Queue.Migrate
---import           Test.Hspec                     (SpecWith, Spec, describe, parallel, it, afterAll, beforeAll, runIO)
 import           Test.Hspec                     (SpecWith, Spec, describe, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
 import           Control.Monad.Catch
@@ -21,7 +20,6 @@ import           Data.List.Split
 import           Database.Postgres.Temp as Temp
 import           Data.Pool
 import           Data.Foldable
-import           Test.Hspec.Core.Spec (sequential)
 import           Crypto.Hash.SHA1 (hash)
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Char8 as BSC
@@ -29,6 +27,7 @@ import           Hasql.Connection
 import           Hasql.Session
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
+import           Data.Int
 
 aroundAll :: forall a. ((a -> IO ()) -> IO ()) -> SpecWith a -> Spec
 aroundAll withFunc specWith = do
@@ -91,36 +90,55 @@ withReadCommitted action pool = do
   withResource pool $ \conn ->
     either (throwIO . userError . show) pure =<< run wrappedAction conn
 
+
+enqueuDequeueSpecs
+  :: (Connection -> E.Value Int32 -> [Int32] -> IO a)
+  -> (WithNotifyHandlers -> Connection -> D.Value Int32 -> Int -> IO [b])
+  -> (b -> Int32)
+  -> SpecWith (Pool Connection)
+enqueuDequeueSpecs enqueuer withFunc extractor = forM_ [[1], [1,2]] $ \initial -> do
+  it "dequeueWith blocks until something is enqueued: before" $ withConnection $ \conn -> do
+      void $ enqueuer conn E.int4 initial
+      putStrLn "after enqueuer"
+      res <- withFunc mempty conn D.int4 $ length initial
+      putStrLn "after withFunc"
+      (sort . fmap extractor) res `shouldBe` sort initial
+
+  it "dequeueWith blocks until something is enqueued: during" $ withConnection $ \conn -> do
+    afterActionMVar  <- newEmptyMVar
+    beforeNotifyMVar <- newEmptyMVar
+
+    let handlers = WithNotifyHandlers
+          { withNotifyHandlersAfterAction = putMVar afterActionMVar ()
+          , withNotifyHandlersBefore      = takeMVar beforeNotifyMVar
+          }
+
+    -- This is the definition of IO.dequeue
+    resultThread <- async $ withFunc handlers conn D.int4 $ length initial
+    takeMVar afterActionMVar
+
+    void $ enqueuer conn E.int4 initial
+
+    putMVar beforeNotifyMVar ()
+
+    fmap (sort . map extractor) (wait (resultThread)) `shouldReturn` sort initial
+
+  it "dequeue blocks until something is enqueued: after" $ withConnection $ \conn -> do
+    resultThread <- async $ withFunc mempty conn D.int4 $ length initial
+    void $ enqueuer conn E.int4 initial
+
+    fmap (sort . fmap extractor) (wait (resultThread)) `shouldReturn` sort initial
+
 spec :: Spec
--- spec = describe "Hasql.Queue.IO" $ parallel $ do
 spec = describe "Hasql.Queue.IO" $ do
-  sequential $ aroundAll withSetup $ describe "basic" $ do
+  aroundAll withSetup $ describe "basic" $ do
     -- I need to test that enqueue occurs before everything
     -- enqueue during the Session.dequeue
     -- After Session.dequeue
-    it "dequeue blocks until something is enqueued: before" $ withConnection $ \conn -> do
-      resultThread <- async $ dequeue conn D.int4 1
-      enqueue_ conn E.int4 [1]
-
-      fmap (fmap pValue) (wait (resultThread)) `shouldReturn` [1]
-
-    it "dequeue blocks until something is enqueued: during" $ withConnection $ \conn -> do
-      E.bracket_ (takeMVar beforeNotify) (tryPutMVar beforeNotify ()) $ do
-        _ <- tryTakeMVar afterAction
-        resultThread <- async $ dequeue conn D.int4 1
-        takeMVar afterAction
-
-        enqueue_ conn E.int4 [1]
-
-        putMVar beforeNotify ()
-
-        fmap (fmap pValue) (wait (resultThread)) `shouldReturn` [1]
-
-    it "dequeue blocks until something is enqueued: after" $ withConnection $ \conn -> do
-      resultThread <- async $ dequeue conn D.int4 1
-      enqueue_ conn E.int4 [1]
-
-      fmap (fmap pValue) (wait (resultThread)) `shouldReturn` [1]
+    enqueuDequeueSpecs enqueue_ dequeueWith       pValue
+    enqueuDequeueSpecs enqueue  dequeueWith       pValue
+    enqueuDequeueSpecs enqueue_ dequeueValuesWith id
+    enqueuDequeueSpecs enqueue  dequeueValuesWith id
 
     it "enqueues and dequeues concurrently withPayload" $ \testDB -> do
       let withPool' = flip withConnection testDB
@@ -145,6 +163,12 @@ spec = describe "Hasql.Queue.IO" $ do
       xs <- atomically $ readTVar ref
       let Just decoded = mapM (decode . encode) xs
       sort decoded `shouldBe` sort expected
+
+    it "enqueue returns a PayloadId that cooresponds to the entry it added" $ withConnection $ \conn -> do
+      [payloadId] <- enqueue conn E.int4 [1]
+      Just actual <- getPayload conn D.int4 payloadId
+
+      pValue actual `shouldBe` 1
 
   aroundAll withSetup $ describe "basic" $ do
     it "enqueues and dequeues concurrently dequeue" $ \testDB -> do

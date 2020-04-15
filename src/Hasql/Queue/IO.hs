@@ -3,12 +3,15 @@ module Hasql.Queue.IO
   , withNotify
   , enqueue
   , enqueue_
-  , beforeNotify
-  , afterAction
   , dequeue
+  , dequeueWith
   , dequeueValues
+  , dequeueValuesWith
   , withPayload
   , getCount
+  , getPayload
+  , withNotifyWith
+  , WithNotifyHandlers (..)
   , S.Payload (..)
   , S.PayloadId (..)
   , QueryException (..)
@@ -28,8 +31,6 @@ import           Data.String
 import           Hasql.Notification
 import           Control.Monad
 import           Data.Int
-import           Control.Concurrent
-import           System.IO.Unsafe
 
 -------------------------------------------------------------------------------
 ---  Types
@@ -62,28 +63,38 @@ transaction inner = do
   sql "COMMIT"
   pure r
 
-beforeNotify :: MVar ()
-beforeNotify = unsafePerformIO $ newMVar ()
-{-# NOINLINE beforeNotify #-}
+-- | To aid in observability and white box testing
+data WithNotifyHandlers = WithNotifyHandlers
+  { withNotifyHandlersAfterAction :: IO ()
+  , withNotifyHandlersBefore      :: IO ()
+  }
 
-afterAction :: MVar ()
-afterAction = unsafePerformIO newEmptyMVar
-{-# NOINLINE afterAction #-}
+instance Semigroup WithNotifyHandlers where
+  x <> y = WithNotifyHandlers
+    { withNotifyHandlersAfterAction = withNotifyHandlersAfterAction x <> withNotifyHandlersAfterAction y
+    , withNotifyHandlersBefore      = withNotifyHandlersBefore      x <> withNotifyHandlersBefore      y
+    }
 
-withNotify :: Connection -> Session a -> (a -> Maybe b) -> IO b
-withNotify conn action theCast = bracket_
+instance Monoid WithNotifyHandlers where
+  mempty = WithNotifyHandlers mempty mempty
+
+withNotifyWith :: WithNotifyHandlers -> Connection -> Session a -> (a -> Maybe b) -> IO b
+withNotifyWith WithNotifyHandlers {..} conn action theCast = bracket_
   (execute conn $ "LISTEN " <> notifyName)
   (execute conn $ "UNLISTEN " <> notifyName)
-  $ fix
-  $ \continue -> do
-      x <- runThrow (transaction action) conn
-      _ <- tryPutMVar afterAction ()
-      case theCast x of
-        Nothing -> do
-          swapMVar beforeNotify ()
-          notifyPayload conn
-          continue
-        Just xs -> pure xs
+  $ fix $ \restart -> do
+    x <- runThrow (transaction action) conn
+    withNotifyHandlersAfterAction
+    case theCast x of
+      Nothing -> do
+        -- TODO record the time here
+        withNotifyHandlersBefore
+        notifyPayload conn
+        restart
+      Just xs -> pure xs
+
+withNotify :: Connection -> Session a -> (a -> Maybe b) -> IO b
+withNotify = withNotifyWith mempty
 
 enqueue :: Connection -> E.Value a -> [a] -> IO [S.PayloadId]
 enqueue conn encoder xs = runThrow (S.enqueueNotify encoder xs) conn
@@ -99,10 +110,17 @@ nonEmpty = \case
 -- TODO Handle >= 0
 -- Should this return nonEmpty?
 dequeue :: Connection -> D.Value a -> Int -> IO [S.Payload a]
-dequeue conn decoder count = withNotify conn (S.dequeue decoder count) nonEmpty
+dequeue = dequeueWith mempty
+
+dequeueWith :: WithNotifyHandlers -> Connection -> D.Value a -> Int -> IO [S.Payload a]
+dequeueWith withNotifyHandlers conn decoder count = withNotifyWith withNotifyHandlers conn (S.dequeue decoder count) nonEmpty
 
 dequeueValues :: Connection -> D.Value a -> Int -> IO [a]
-dequeueValues conn decoder count = withNotify conn (S.dequeueValues decoder count) nonEmpty
+dequeueValues = dequeueValuesWith mempty
+
+dequeueValuesWith :: WithNotifyHandlers -> Connection -> D.Value a -> Int -> IO [a]
+dequeueValuesWith withNotifyHandlers conn decoder count
+  = withNotifyWith withNotifyHandlers conn (S.dequeueValues decoder count) nonEmpty
 
 {-|
 
@@ -118,7 +136,20 @@ withPayload :: Connection
             -- ^ retry count
             -> (S.Payload a -> IO b)
             -> IO (Either SomeException b)
-withPayload conn decoder retryCount f = withNotify conn (S.withPayload decoder retryCount f) sequenceA
+withPayload = withPayloadWith mempty
+
+withPayloadWith :: WithNotifyHandlers
+                -> Connection
+                -> D.Value a
+                -> Int
+                -- ^ retry count
+                -> (S.Payload a -> IO b)
+                -> IO (Either SomeException b)
+withPayloadWith withNotifyHandlers conn decoder retryCount f =
+   withNotifyWith withNotifyHandlers conn (S.withPayload decoder retryCount f) sequenceA
 
 getCount :: Connection -> IO Int64
 getCount = runThrow S.getCount
+
+getPayload :: Connection -> D.Value a -> S.PayloadId -> IO (Maybe (S.Payload a))
+getPayload conn decoder payloadId = runThrow (S.getPayload decoder payloadId) conn
