@@ -7,8 +7,6 @@ import           Data.Functor.Contravariant
 import           Data.String.Here.Uninterpolated
 import           Hasql.Statement
 import           Control.Exception
-import           Data.Bifunctor
-import           Data.Bitraversable
 import           Control.Monad.IO.Class
 import           Data.ByteString (ByteString)
 
@@ -214,19 +212,20 @@ setFailed thePid = do
     UPDATE payloads SET state='failed' WHERE id = $1
   |]
 
-withPayload :: D.Value a -> Int -> (Payload a -> IO b) -> Session (Either SomeException (Maybe b))
+-- | Dequeue and
+withPayload :: D.Value a -> Int -> (Payload a -> IO b) -> Session (Maybe b)
 withPayload decoder retryCount f = getEnqueue decoder >>= \case
-  Nothing -> pure (Right Nothing)
-  Just payload@Payload {..} -> fmap Just <$> do
+  Nothing -> pure Nothing
+  Just payload@Payload {..} -> Just <$> do
     setDequeued pId
 
     let updateStateOnFailure = if pAttempts < retryCount
           then setEnqueueWithCount pId (pAttempts + 1)
           else setFailed pId
 
-    bisequenceA
-      .   bimap (\e -> updateStateOnFailure >> return e) pure
-      =<< liftIO (try $ f payload)
+    liftIO (try $ f payload) >>= \case
+      Left (e :: SomeException) -> updateStateOnFailure >> liftIO (throwIO e)
+      Right x -> pure x
 
 -- | Get the number of rows in the 'Enqueued' state.
 getCount :: Session Int64

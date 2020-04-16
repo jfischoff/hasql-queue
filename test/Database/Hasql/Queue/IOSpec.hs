@@ -15,7 +15,6 @@ import           Hasql.Queue.IO
 import           Hasql.Queue.Migrate
 import           Test.Hspec                     (SpecWith, Spec, describe, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
-import           Control.Monad.Catch
 import           Data.List.Split
 import           Database.Postgres.Temp as Temp
 import           Data.Pool
@@ -99,9 +98,7 @@ enqueuDequeueSpecs
 enqueuDequeueSpecs enqueuer withFunc extractor = forM_ [[1], [1,2]] $ \initial -> do
   it "dequeueWith blocks until something is enqueued: before" $ withConnection $ \conn -> do
       void $ enqueuer conn E.int4 initial
-      putStrLn "after enqueuer"
       res <- withFunc mempty conn D.int4 $ length initial
-      putStrLn "after withFunc"
       (sort . fmap extractor) res `shouldBe` sort initial
 
   it "dequeueWith blocks until something is enqueued: during" $ withConnection $ \conn -> do
@@ -127,7 +124,7 @@ enqueuDequeueSpecs enqueuer withFunc extractor = forM_ [[1], [1,2]] $ \initial -
     resultThread <- async $ withFunc mempty conn D.int4 $ length initial
     void $ enqueuer conn E.int4 initial
 
-    fmap (sort . fmap extractor) (wait (resultThread)) `shouldReturn` sort initial
+    fmap (sort . fmap extractor) (wait resultThread) `shouldReturn` sort initial
 
 spec :: Spec
 spec = describe "Hasql.Queue.IO" $ do
@@ -140,6 +137,36 @@ spec = describe "Hasql.Queue.IO" $ do
     enqueuDequeueSpecs enqueue_ dequeueValuesWith id
     enqueuDequeueSpecs enqueue  dequeueValuesWith id
 
+    it "withPayload blocks until something is enqueued: before" $ withConnection $ \conn -> do
+      void $ enqueue conn E.int4 [1]
+      res <- withPayloadWith mempty conn D.int4 1 pure
+      pValue res `shouldBe` 1
+
+    it "withPayload blocks until something is enqueued: during" $ withConnection $ \conn -> do
+      afterActionMVar  <- newEmptyMVar
+      beforeNotifyMVar <- newEmptyMVar
+
+      let handlers = WithNotifyHandlers
+            { withNotifyHandlersAfterAction = putMVar afterActionMVar ()
+            , withNotifyHandlersBefore      = takeMVar beforeNotifyMVar
+            }
+
+      -- This is the definition of IO.dequeue
+      resultThread <- async $ withPayloadWith handlers conn D.int4 1 pure
+      takeMVar afterActionMVar
+
+      void $ enqueue conn E.int4 [1]
+
+      putMVar beforeNotifyMVar ()
+
+      fmap pValue (wait resultThread) `shouldReturn` 1
+
+    it "withPayload blocks until something is enqueued: after" $ withConnection $ \conn -> do
+      resultThread <- async $ withPayloadWith mempty conn D.int4 1 pure
+      void $ enqueue conn E.int4 [1]
+
+      fmap pValue (wait resultThread) `shouldReturn` 1
+
     it "enqueues and dequeues concurrently withPayload" $ \testDB -> do
       let withPool' = flip withConnection testDB
           elementCount = 1000 :: Int
@@ -148,7 +175,7 @@ spec = describe "Hasql.Queue.IO" $ do
       ref <- newTVarIO []
 
       loopThreads <- replicateM 35 $ async $ withPool' $ \c -> fix $ \next -> do
-        lastCount <- either throwM return <=< withPayload c D.int4 1 $ \(Payload {..}) -> do
+        lastCount <- withPayload c D.int4 1 $ \(Payload {..}) -> do
           atomically $ do
             xs <- readTVar ref
             writeTVar ref $ pValue : xs

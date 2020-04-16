@@ -8,6 +8,7 @@ module Hasql.Queue.IO
   , dequeueValues
   , dequeueValuesWith
   , withPayload
+  , withPayloadWith
   , getCount
   , getPayload
   , withNotifyWith
@@ -135,7 +136,7 @@ withPayload :: Connection
             -> Int
             -- ^ retry count
             -> (S.Payload a -> IO b)
-            -> IO (Either SomeException b)
+            -> IO b
 withPayload = withPayloadWith mempty
 
 withPayloadWith :: WithNotifyHandlers
@@ -144,9 +145,9 @@ withPayloadWith :: WithNotifyHandlers
                 -> Int
                 -- ^ retry count
                 -> (S.Payload a -> IO b)
-                -> IO (Either SomeException b)
+                -> IO b
 withPayloadWith withNotifyHandlers conn decoder retryCount f =
-   withNotifyWith withNotifyHandlers conn (S.withPayload decoder retryCount f) sequenceA
+  withNotifyWith withNotifyHandlers conn (S.withPayload decoder retryCount f) id
 
 getCount :: Connection -> IO Int64
 getCount = runThrow S.getCount

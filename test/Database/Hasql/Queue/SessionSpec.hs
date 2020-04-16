@@ -13,7 +13,6 @@ import           Test.Hspec                     (SpecWith, Spec, describe, paral
 import           Test.Hspec.Expectations.Lifted
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
-import           Data.Either
 import           Database.Postgres.Temp as Temp
 import           Data.Pool
 import           Data.Foldable
@@ -25,6 +24,8 @@ import           Hasql.Connection
 import           Hasql.Session
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
+import           Data.Typeable
+import           Data.Int
 
 aroundAll :: forall a. ((a -> IO ()) -> IO ()) -> SpecWith a -> Spec
 aroundAll withFunc specWith = do
@@ -87,6 +88,11 @@ withReadCommitted action pool = do
   withResource pool $ \conn ->
     either (throwIO . userError . show) pure =<< run wrappedAction conn
 
+newtype TooManyRetries = TooManyRetries Int64
+  deriving (Show, Eq, Typeable)
+
+instance Exception TooManyRetries
+
 spec :: Spec
 spec = describe "Database.Queue" $ parallel $ do
   sequential $ aroundAll withSetup $ describe "basic" $ do
@@ -94,9 +100,8 @@ spec = describe "Database.Queue" $ parallel $ do
       liftIO $ migrate conn intPayloadMigration
 
     it "empty locks nothing" $ \pool -> do
-      runReadCommitted pool (withPayload D.int4 8 return) >>= \case
-        Left err -> fail $ show err
-        Right x -> x `shouldBe` Nothing
+      runReadCommitted pool (withPayload D.int4 8 return) >>= \x ->
+        x `shouldBe` Nothing
     it "empty gives count 0" $ \pool ->
       runReadCommitted pool getCount `shouldReturn` 0
 
@@ -112,12 +117,9 @@ spec = describe "Database.Queue" $ parallel $ do
         secondCount <- getCount
         pure (withPayloadResult, firstCount, secondCount)
 
-      case withPayloadResult of
-        Left err -> fail $ "withPayload failed with: " <> show err
-        Right _ -> pure ()
-
       firstCount `shouldBe` 1
       secondCount `shouldBe` 0
+      withPayloadResult `shouldBe` Just ()
 
     it "enqueueNoNotifyDB_/dequeueValue" $ \pool -> do
       let initial = 2
@@ -128,39 +130,33 @@ spec = describe "Database.Queue" $ parallel $ do
       actual `shouldBe` [initial]
 
     it "enqueuesDB/withPayload/retries" $ \pool -> do
-      (theCount, xs) <- runReadCommitted pool $ do
+      e <- E.try $ runReadCommitted pool $ do
         void $ enqueue E.int4 [1]
         theCount <- getCount
 
-        fmap (theCount,) $ replicateM 7 $ withPayload D.int4 8 (\(Payload {..}) ->
-            throwM $ userError "not enough tries"
+        replicateM_ 7 $ withPayload D.int4 8 (\(Payload {..}) ->
+            throwM $ TooManyRetries theCount
           )
 
-      theCount `shouldBe` 1
-      all isLeft xs `shouldBe` True
+      (e :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
 
-      either throwM (const $ pure ()) <=< runReadCommitted pool $ withPayload D.int4 8 (\(Payload {..}) -> do
+      void $ runReadCommitted pool $ withPayload D.int4 8 (\(Payload {..}) -> do
         pAttempts `shouldBe` 7
         pValue `shouldBe` 1
         )
 
     it "enqueuesDB/withPayload/timesout" $ \pool -> do
-      (firstCount, xs, secondCount) <- runReadCommitted pool $ do
+      e <- E.try $ runReadCommitted pool $ do
         void $ enqueue E.int4 [1]
         firstCount <- getCount
 
-        xs <- replicateM 2 $ withPayload D.int4 1 (\(Payload {..}) ->
-            throwM $ userError "not enough tries"
+        replicateM_ 2 $ withPayload D.int4 1 (\(Payload {..}) ->
+            throwM $ TooManyRetries firstCount
           )
 
-        secondCount <- getCount
+      (e :: Either TooManyRetries ())`shouldBe` Left (TooManyRetries 1)
 
-        pure (firstCount, xs, secondCount)
-
-      firstCount `shouldBe` 1
-      all isLeft xs `shouldBe` True
-
-      secondCount `shouldBe` 0
+      runReadCommitted pool getCount `shouldReturn` 0
 
     it "selects the oldest first" $ \pool -> do
       (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount) <- runReadCommitted pool $ do
@@ -185,16 +181,10 @@ spec = describe "Database.Queue" $ parallel $ do
         pure (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount)
 
       firstCount `shouldBe` 2
-
-      case firstWithPayloadResult of
-        Left err -> fail $ "first withPayload failed with: " <> show err
-        Right _ -> pure ()
-
-      case secondWithPayloadResult of
-        Left err -> fail $ "second withPayload failed with: " <> show err
-        Right _ -> pure ()
+      firstWithPayloadResult `shouldBe` Just ()
 
       secondCount `shouldBe` 0
+      secondWithPayloadResult `shouldBe` Just ()
 {-
     it "enqueues and dequeues concurrently withPayload" $ \testDB -> do
       let withPool' = flip withConnection testDB

@@ -70,6 +70,7 @@ default-extensions:
 - TupleSections
 - GeneralizedNewtypeDeriving
 - QuasiQuotes
+- ScopedTypeVariables
 
 dependencies:
 - base >=4.7 && <5
