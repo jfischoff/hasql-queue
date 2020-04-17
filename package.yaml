@@ -59,7 +59,11 @@ github: jfischoff/postgresql-queue
 extra-source-files:
 - README.md
 ghc-options:
+- -Wall
+- -Werror
 - -Wno-unused-do-bind
+- -Wno-unused-foralls
+
 
 tested-with: GHC ==8.8.1
 
@@ -71,6 +75,8 @@ default-extensions:
 - GeneralizedNewtypeDeriving
 - QuasiQuotes
 - ScopedTypeVariables
+- TypeApplications
+- AllowAmbiguousTypes
 
 dependencies:
 - base >=4.7 && <5

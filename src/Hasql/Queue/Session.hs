@@ -9,6 +9,7 @@ import           Hasql.Statement
 import           Control.Exception
 import           Control.Monad.IO.Class
 import           Data.ByteString (ByteString)
+import           Control.Monad (when)
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -213,18 +214,18 @@ setFailed thePid = do
   |]
 
 -- | Dequeue and
-withPayload :: D.Value a -> Int -> (Payload a -> IO b) -> Session (Maybe b)
+withPayload :: forall a b. D.Value a -> Int -> (Payload a -> IO b) -> Session (Maybe b)
 withPayload decoder retryCount f = getEnqueue decoder >>= \case
   Nothing -> pure Nothing
-  Just payload@Payload {..} -> Just <$> do
+  Just payload@Payload {..} -> fmap Just $ do
     setDequeued pId
 
-    let updateStateOnFailure = if pAttempts < retryCount
-          then setEnqueueWithCount pId (pAttempts + 1)
-          else setFailed pId
+    let updateStateOnFailure = do
+          setEnqueueWithCount pId (pAttempts + 1)
+          when (pAttempts >= retryCount) $ setFailed pId
 
     liftIO (try $ f payload) >>= \case
-      Left (e :: SomeException) -> updateStateOnFailure >> liftIO (throwIO e)
+      Left  (e :: SomeException) -> updateStateOnFailure >> liftIO (throwIO e)
       Right x -> pure x
 
 -- | Get the number of rows in the 'Enqueued' state.

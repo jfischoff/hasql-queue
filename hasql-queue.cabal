@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d343a5be29c8728edf21887c4363bfdee0a4bba469d4794e657775025b1066f5
+-- hash: 9cb4da6e726ce6d9e38e090bc12e35963a0fbc242620b34cea7df5885ebae43d
 
 name:           hasql-queue
 version:        1.0.1
@@ -61,8 +61,8 @@ library
       Paths_hasql_queue
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables
-  ghc-options: -Wno-unused-do-bind
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  ghc-options: -Wall -Werror -Wno-unused-do-bind -Wno-unused-foralls
   build-depends:
       aeson
     , base >=4.7 && <5
@@ -85,8 +85,8 @@ executable benchmark
       Paths_hasql_queue
   hs-source-dirs:
       benchmarks
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables
-  ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N -g2
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  ghc-options: -Wall -Werror -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N -g2
   build-depends:
       aeson
     , async
@@ -118,8 +118,8 @@ test-suite unit-tests
       Paths_hasql_queue
   hs-source-dirs:
       test
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables
-  ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  ghc-options: -Wall -Werror -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
     , async

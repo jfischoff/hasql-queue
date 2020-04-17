@@ -131,23 +131,33 @@ maximum. Return `Nothing` is the `payloads` table is empty otherwise the result 
 from the payload ingesting function.
 
 -}
-withPayload :: Connection
+withPayload :: forall a b. Connection
             -> D.Value a
             -> Int
             -- ^ retry count
             -> (S.Payload a -> IO b)
             -> IO b
-withPayload = withPayloadWith mempty
+withPayload = withPayloadWith @IOException mempty
 
-withPayloadWith :: WithNotifyHandlers
+withPayloadWith :: forall e a b
+                 . Exception e
+                => WithNotifyHandlers
                 -> Connection
                 -> D.Value a
                 -> Int
                 -- ^ retry count
                 -> (S.Payload a -> IO b)
                 -> IO b
-withPayloadWith withNotifyHandlers conn decoder retryCount f =
-  withNotifyWith withNotifyHandlers conn (S.withPayload decoder retryCount f) id
+withPayloadWith withNotifyHandlers conn decoder retryCount f = (fix $ \restart i -> do
+    try (withNotifyWith withNotifyHandlers conn (S.withPayload decoder retryCount f) id) >>= \case
+      Right x -> pure x
+      Left (e :: e) ->
+        if i < retryCount then
+          restart $ i + 1
+        else
+          throwIO e
+  ) 0
+
 
 getCount :: Connection -> IO Int64
 getCount = runThrow S.getCount

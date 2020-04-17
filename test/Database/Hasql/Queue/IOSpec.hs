@@ -27,6 +27,7 @@ import           Hasql.Session
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Data.Int
+import           Data.Typeable
 
 aroundAll :: forall a. ((a -> IO ()) -> IO ()) -> SpecWith a -> Spec
 aroundAll withFunc specWith = do
@@ -126,6 +127,11 @@ enqueuDequeueSpecs enqueuer withFunc extractor = forM_ [[1], [1,2]] $ \initial -
 
     fmap (sort . fmap extractor) (wait resultThread) `shouldReturn` sort initial
 
+data FailedWithPayload = FailedWithPayload
+  deriving (Show, Eq, Typeable)
+
+instance Exception FailedWithPayload
+
 spec :: Spec
 spec = describe "Hasql.Queue.IO" $ do
   aroundAll withSetup $ describe "basic" $ do
@@ -139,7 +145,7 @@ spec = describe "Hasql.Queue.IO" $ do
 
     it "withPayload blocks until something is enqueued: before" $ withConnection $ \conn -> do
       void $ enqueue conn E.int4 [1]
-      res <- withPayloadWith mempty conn D.int4 1 pure
+      res <- withPayloadWith @IOException mempty conn D.int4 1 pure
       pValue res `shouldBe` 1
 
     it "withPayload blocks until something is enqueued: during" $ withConnection $ \conn -> do
@@ -152,7 +158,7 @@ spec = describe "Hasql.Queue.IO" $ do
             }
 
       -- This is the definition of IO.dequeue
-      resultThread <- async $ withPayloadWith handlers conn D.int4 1 pure
+      resultThread <- async $ withPayloadWith @IOException handlers conn D.int4 1 pure
       takeMVar afterActionMVar
 
       void $ enqueue conn E.int4 [1]
@@ -162,10 +168,35 @@ spec = describe "Hasql.Queue.IO" $ do
       fmap pValue (wait resultThread) `shouldReturn` 1
 
     it "withPayload blocks until something is enqueued: after" $ withConnection $ \conn -> do
-      resultThread <- async $ withPayloadWith mempty conn D.int4 1 pure
+      resultThread <- async $ withPayloadWith @IOException mempty conn D.int4 1 pure
       void $ enqueue conn E.int4 [1]
 
       fmap pValue (wait resultThread) `shouldReturn` 1
+
+    it "withPayload fails and sets the retries to +1" $ withConnection $ \conn -> do
+      [payloadId] <- enqueue conn E.int4 [1]
+      handle (\FailedWithPayload -> pure ()) $ withPayload conn D.int4 0 $ \_ -> throwIO FailedWithPayload
+      Just Payload {..} <- getPayload conn D.int4 payloadId
+
+      pState `shouldBe` Failed
+      pAttempts  `shouldBe` 1
+
+    it "withPayload succeeds even if the first attempt fails" $ withConnection $ \conn -> do
+      [payloadId] <- enqueue conn E.int4 [1]
+
+      ref <- newIORef (0 :: Int)
+
+      withPayloadWith @FailedWithPayload mempty conn D.int4 1 (\_ -> do
+        count <- readIORef ref
+        writeIORef ref $ count + 1
+        when (count < 1) $ throwIO FailedWithPayload
+        pure '!') `shouldReturn` '!'
+
+      Just Payload {..} <- getPayload conn D.int4 payloadId
+
+      pState `shouldBe` Dequeued
+      -- Failed attempts I guess
+      pAttempts  `shouldBe` 1
 
     it "enqueues and dequeues concurrently withPayload" $ \testDB -> do
       let withPool' = flip withConnection testDB
