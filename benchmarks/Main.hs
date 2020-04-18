@@ -21,7 +21,6 @@ import           Data.Int
 
 -- TODO need to make sure the number of producers and consumers does not go over the number of connections
 
-
 withConn :: DB -> (Connection -> IO a) -> IO a
 withConn db f = do
   let connStr = toConnectionString db
