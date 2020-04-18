@@ -139,6 +139,9 @@ withPayload :: forall a b. Connection
             -> IO b
 withPayload = withPayloadWith @IOException mempty
 
+-- The issue I have is the retry logic is it will retry a certain numbers of times
+-- but that doesn't mean that it is retrying the same element each time.
+-- It could return 8 times and it could be a different payload.
 withPayloadWith :: forall e a b
                  . Exception e
                 => WithNotifyHandlers

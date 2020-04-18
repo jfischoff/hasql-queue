@@ -94,7 +94,7 @@ newtype TooManyRetries = TooManyRetries Int64
 instance Exception TooManyRetries
 
 spec :: Spec
-spec = describe "Database.Queue" $ parallel $ do
+spec = describe "Hasql.Queue.Session" $ parallel $ do
   sequential $ aroundAll withSetup $ describe "basic" $ do
     it "is okay to migrate multiple times" $ withConnection $ \conn ->
       liftIO $ migrate conn intPayloadMigration
@@ -105,7 +105,7 @@ spec = describe "Database.Queue" $ parallel $ do
     it "empty gives count 0" $ \pool ->
       runReadCommitted pool getCount `shouldReturn` 0
 
-    it "enqueuesDB/withPayload" $ \pool -> do
+    it "enqueue/withPayload" $ \pool -> do
       (withPayloadResult, firstCount, secondCount) <- runReadCommitted pool $ do
         payloadId <- enqueueNotify E.int4 [1]
         firstCount <- getCount
@@ -121,7 +121,7 @@ spec = describe "Database.Queue" $ parallel $ do
       secondCount `shouldBe` 0
       withPayloadResult `shouldBe` Just ()
 
-    it "enqueueNoNotifyDB_/dequeueValue" $ \pool -> do
+    it "enqueue_/dequeueValues" $ \pool -> do
       let initial = 2
       actual <- runReadCommitted pool $ do
         enqueue_ E.int4 [initial]
@@ -129,7 +129,7 @@ spec = describe "Database.Queue" $ parallel $ do
 
       actual `shouldBe` [initial]
 
-    it "enqueuesDB/withPayload/retries" $ \pool -> do
+    it "enqueue/withPayload/retries" $ \pool -> do
       e <- E.try $ runReadCommitted pool $ do
         void $ enqueue E.int4 [1]
         theCount <- getCount
@@ -145,7 +145,7 @@ spec = describe "Database.Queue" $ parallel $ do
         pValue `shouldBe` 1
         )
 
-    it "enqueuesDB/withPayload/timesout" $ \pool -> do
+    it "enqueue/withPayload/timesout" $ \pool -> do
       e <- E.try $ runReadCommitted pool $ do
         void $ enqueue E.int4 [1]
         firstCount <- getCount
@@ -185,53 +185,3 @@ spec = describe "Database.Queue" $ parallel $ do
 
       secondCount `shouldBe` 0
       secondWithPayloadResult `shouldBe` Just ()
-{-
-    it "enqueues and dequeues concurrently withPayload" $ \testDB -> do
-      let withPool' = flip withConnection testDB
-          elementCount = 1000 :: Int
-          expected = [0 .. elementCount - 1]
-
-      ref <- newTVarIO []
-
-      loopThreads <- replicateM 35 $ async $ withPool' $ \c -> fix $ \next -> do
-        lastCount <- either throwM return <=< withPayload c D.int4 1 $ \(Payload {..}) -> do
-          atomically $ do
-            xs <- readTVar ref
-            writeTVar ref $ pValue : xs
-            return $ length xs + 1
-
-        when (lastCount < elementCount) next
-
-      forM_ (chunksOf (elementCount `div` 11) expected) $ \xs -> forkIO $ void $ withPool' $ \c ->
-         forM_ xs $ \i -> enqueue c E.int4 $ fromIntegral i
-
-      _ <- waitAnyCancel loopThreads
-      xs <- atomically $ readTVar ref
-      let Just decoded = mapM (decode . encode) xs
-      sort decoded `shouldBe` sort expected
-
-  aroundAll withSetup $ describe "basic" $ do
-    it "enqueues and dequeues concurrently dequeue" $ \testDB -> do
-      let withPool' = flip withConnection testDB
-          elementCount = 1000 :: Int
-          expected = [0 .. elementCount - 1]
-
-      ref <- newTVarIO []
-
-      loopThreads <- replicateM 35 $ async $ withPool' $ \c -> fix $ \next -> do
-        Payload {..} <- dequeue c D.int4
-        lastCount <- atomically $ do
-          xs <- readTVar ref
-          writeTVar ref $ pValue : xs
-          return $ length xs + 1
-
-        when (lastCount < elementCount) next
-
-      forM_ (chunksOf (elementCount `div` 11) expected) $ \xs -> forkIO $ void $ withPool' $ \c ->
-         forM_ xs $ \i -> enqueue c E.int4 $ fromIntegral i
-
-      _ <- waitAnyCancel loopThreads
-      xs <- atomically $ readTVar ref
-      let Just decoded = mapM (decode . encode) xs
-      sort decoded `shouldBe` sort expected
--}

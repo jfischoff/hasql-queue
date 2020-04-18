@@ -135,9 +135,6 @@ instance Exception FailedWithPayload
 spec :: Spec
 spec = describe "Hasql.Queue.IO" $ do
   aroundAll withSetup $ describe "basic" $ do
-    -- I need to test that enqueue occurs before everything
-    -- enqueue during the Session.dequeue
-    -- After Session.dequeue
     enqueuDequeueSpecs enqueue_ dequeueWith       pValue
     enqueuDequeueSpecs enqueue  dequeueWith       pValue
     enqueuDequeueSpecs enqueue_ dequeueValuesWith id
