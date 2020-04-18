@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9cb4da6e726ce6d9e38e090bc12e35963a0fbc242620b34cea7df5885ebae43d
+-- hash: bae6a067d156bc0876dda77c85ea920ce0b83432423a0740f39d6577b17b4247
 
 name:           hasql-queue
 version:        1.0.1
@@ -62,7 +62,7 @@ library
   hs-source-dirs:
       src
   default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
-  ghc-options: -Wall -Werror -Wno-unused-do-bind -Wno-unused-foralls
+  ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls
   build-depends:
       aeson
     , base >=4.7 && <5
@@ -76,36 +76,6 @@ library
     , stm
     , text
     , time
-    , transformers
-  default-language: Haskell2010
-
-executable benchmark
-  main-is: Main.hs
-  other-modules:
-      Paths_hasql_queue
-  hs-source-dirs:
-      benchmarks
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
-  ghc-options: -Wall -Werror -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N -g2
-  build-depends:
-      aeson
-    , async
-    , base >=4.7 && <5
-    , base64-bytestring
-    , bytestring
-    , cryptohash-sha1
-    , exceptions
-    , hasql
-    , hasql-notifications
-    , hasql-queue
-    , here
-    , monad-control
-    , random
-    , resource-pool
-    , stm
-    , text
-    , time
-    , tmp-postgres
     , transformers
   default-language: Haskell2010
 
@@ -119,7 +89,7 @@ test-suite unit-tests
   hs-source-dirs:
       test
   default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
-  ghc-options: -Wall -Werror -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
     , async
