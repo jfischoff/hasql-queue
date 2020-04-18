@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d7997fe1ff958bde5f08be087097b883fb10de79b2a22537d738aa0729fb1dfb
+-- hash: bae6a067d156bc0876dda77c85ea920ce0b83432423a0740f39d6577b17b4247
 
 name:           hasql-queue
 version:        1.0.1
@@ -54,14 +54,15 @@ source-repository head
 
 library
   exposed-modules:
-      Database.Hasql.Queue
-      Database.Hasql.Queue.Migrate
+      Hasql.Queue.Migrate
+      Hasql.Queue.Session
+      Hasql.Queue.IO
   other-modules:
       Paths_hasql_queue
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections
-  ghc-options: -Wno-unused-do-bind
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls
   build-depends:
       aeson
     , base >=4.7 && <5
@@ -80,13 +81,15 @@ library
 
 test-suite unit-tests
   type: exitcode-stdio-1.0
-  main-is: Database/Hasql/QueueSpec.hs
+  main-is: Main.hs
   other-modules:
+      Database.Hasql.Queue.IOSpec
+      Database.Hasql.Queue.SessionSpec
       Paths_hasql_queue
   hs-source-dirs:
       test
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections
-  ghc-options: -Wno-unused-do-bind -O2 -threaded -rtsopts -with-rtsopts=-N
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
     , async

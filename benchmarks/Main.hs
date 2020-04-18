@@ -1,8 +1,7 @@
 module Main where
 import System.Environment
-import Database.Hasql.Queue
-import Database.Hasql.Queue.Migrate
-import Data.Aeson
+import Hasql.Queue.IO
+import Hasql.Queue.Migrate
 import Data.IORef
 import Control.Exception
 import           Crypto.Hash.SHA1 (hash)
@@ -11,7 +10,7 @@ import qualified Data.ByteString.Char8 as BSC
 import           Data.Pool
 import           Database.Postgres.Temp
 import           Control.Concurrent
-import           Control.Monad (replicateM, forever, void, replicateM_)
+import           Control.Monad (replicateM, forever, void)
 import           Hasql.Session
 import           Hasql.Connection
 import           Data.Function
@@ -21,7 +20,6 @@ import           Hasql.Statement
 import           Data.Int
 
 -- TODO need to make sure the number of producers and consumers does not go over the number of connections
-
 
 withConn :: DB -> (Connection -> IO a) -> IO a
 withConn db f = do
@@ -66,15 +64,11 @@ main = do
 
   flip finally printCounters $ withSetup $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
-    let totalEnqueueCount = initialDequeueCount + initialEnqueueCount
-        enqueueAction = void $ withResource pool $ \conn -> enqueueNoNotify_ conn E.int4 payload
-        dequeueAction = void $ withResource pool $ \conn -> fix $ \next -> case batchCount of
-          0 -> tryDequeueValue conn D.int4 >>= \case
-            Nothing -> next
-            Just _ -> pure ()
-          theBatchCount -> tryDequeueManyValues conn D.int4 theBatchCount >>= \case
-            [] -> next
-            _ -> pure ()
+    let enqueueAction = void $ withResource pool $ \conn -> enqueue_ conn E.int4 [payload]
+        dequeueAction = void $ withResource pool $ \conn -> fix $ \next ->
+          dequeueValues conn D.int4 batchCount >>= \case
+              [] -> next
+              _ -> pure ()
 
     let enqueueInsertSql = "INSERT INTO payloads (attempts, value) SELECT 0, g.value FROM generate_series(1, $1) AS g (value)"
         enqueueInsertStatement =
@@ -90,8 +84,6 @@ main = do
 
     withResource pool $ \conn -> void $ run (sql "VACUUM FULL ANALYZE") conn
     putStrLn "Finished VACUUM FULL ANALYZE"
-    -- forever $ threadDelay 1000000000
-    getLine
 
     let enqueueLoop = forever $ do
           enqueueAction

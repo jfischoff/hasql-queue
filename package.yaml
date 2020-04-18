@@ -59,7 +59,10 @@ github: jfischoff/postgresql-queue
 extra-source-files:
 - README.md
 ghc-options:
+- -Wall
 - -Wno-unused-do-bind
+- -Wno-unused-foralls
+
 
 tested-with: GHC ==8.8.1
 
@@ -68,6 +71,11 @@ default-extensions:
 - LambdaCase
 - RecordWildCards
 - TupleSections
+- GeneralizedNewtypeDeriving
+- QuasiQuotes
+- ScopedTypeVariables
+- TypeApplications
+- AllowAmbiguousTypes
 
 dependencies:
 - base >=4.7 && <5
@@ -87,12 +95,13 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
-  - Database.Hasql.Queue
-  - Database.Hasql.Queue.Migrate
+  - Hasql.Queue.Migrate
+  - Hasql.Queue.Session
+  - Hasql.Queue.IO
 
 tests:
   unit-tests:
-    main: Database/Hasql/QueueSpec.hs
+    main: Main.hs
     source-dirs: test
     ghc-options:
     - -O2
@@ -110,4 +119,3 @@ tests:
     - split
     - tmp-postgres
     - resource-pool
-
