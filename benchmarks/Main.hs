@@ -2,7 +2,6 @@ module Main where
 import System.Environment
 import Hasql.Queue.IO
 import Hasql.Queue.Migrate
-import Data.Aeson
 import Data.IORef
 import Control.Exception
 import           Crypto.Hash.SHA1 (hash)
@@ -11,7 +10,7 @@ import qualified Data.ByteString.Char8 as BSC
 import           Data.Pool
 import           Database.Postgres.Temp
 import           Control.Concurrent
-import           Control.Monad (replicateM, forever, void, replicateM_)
+import           Control.Monad (replicateM, forever, void)
 import           Hasql.Session
 import           Hasql.Connection
 import           Data.Function
@@ -66,8 +65,7 @@ main = do
 
   flip finally printCounters $ withSetup $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
-    let totalEnqueueCount = initialDequeueCount + initialEnqueueCount
-        enqueueAction = void $ withResource pool $ \conn -> enqueue_ conn E.int4 [payload]
+    let enqueueAction = void $ withResource pool $ \conn -> enqueue_ conn E.int4 [payload]
         dequeueAction = void $ withResource pool $ \conn -> fix $ \next ->
           dequeueValues conn D.int4 batchCount >>= \case
               [] -> next
