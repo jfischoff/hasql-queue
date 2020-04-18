@@ -60,7 +60,6 @@ extra-source-files:
 - README.md
 ghc-options:
 - -Wall
-- -Werror
 - -Wno-unused-do-bind
 - -Wno-unused-foralls
 
@@ -120,4 +119,3 @@ tests:
     - split
     - tmp-postgres
     - resource-pool
-
