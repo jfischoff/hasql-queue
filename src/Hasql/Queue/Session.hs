@@ -2,7 +2,7 @@ module Hasql.Queue.Session
   ( enqueue
   , enqueueNotify
   , dequeue
-  , withPayload
+  , withDequeue
   , getCount
   , Payload (..)
   , PayloadId (..)
@@ -106,8 +106,8 @@ setFailed thePid = do
   |]
 
 -- | Dequeue and
-withPayload :: D.Value a -> Int -> (a -> IO b) -> Session (Maybe b)
-withPayload decoder retryCount f = getEnqueue decoder >>= \case
+withDequeue :: D.Value a -> Int -> (a -> IO b) -> Session (Maybe b)
+withDequeue decoder retryCount f = getEnqueue decoder >>= \case
   Nothing -> pure Nothing
   Just Payload {..} -> fmap Just $ do
     setDequeued pId

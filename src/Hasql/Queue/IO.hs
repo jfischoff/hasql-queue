@@ -1,12 +1,9 @@
 module Hasql.Queue.IO
-  ( notifyPayload
-  , withNotify
-  , enqueue
-  , dequeue
-  , dequeueWith
-  , withPayload
-  , withPayloadWith
+  ( withNotify
   , withNotifyWith
+  , enqueue
+  , withDequeue
+  , withDequeueWith
   , WithNotifyHandlers (..)
   , QueryException (..)
   ) where
@@ -91,21 +88,6 @@ withNotify = withNotifyWith mempty
 enqueue :: Connection -> E.Value a -> [a] -> IO ()
 enqueue conn encoder xs = runThrow (S.enqueueNotify encoder xs) conn
 
-nonEmpty :: [a] -> Maybe [a]
-nonEmpty = \case
-  [] -> Nothing
-  ys -> pure ys
-
--- TODO Handle >= 0
--- Should this return nonEmpty? <- No. That would be annoying to import.
-dequeue :: Connection -> D.Value a -> Int -> IO [a]
-dequeue = dequeueWith mempty
-
-dequeueWith :: WithNotifyHandlers -> Connection -> D.Value a -> Int -> IO [a]
-dequeueWith withNotifyHandlers conn decoder count
-  | count < 1 = pure []
-  | otherwise = withNotifyWith withNotifyHandlers conn (S.dequeue decoder count) nonEmpty
-
 {-|
 
 Attempt to get a payload and process it. If the function passed in throws an exception
@@ -114,18 +96,18 @@ maximum. Return `Nothing` is the `payloads` table is empty otherwise the result 
 from the payload ingesting function.
 
 -}
-withPayload :: forall a b. Connection
+withDequeue :: forall a b. Connection
             -> D.Value a
             -> Int
             -- ^ retry count
             -> (a -> IO b)
             -> IO b
-withPayload = withPayloadWith @IOException mempty
+withDequeue = withDequeueWith @IOException mempty
 
 -- The issue I have is the retry logic is it will retry a certain numbers of times
 -- but that doesn't mean that it is retrying the same element each time.
 -- It could return 8 times and it could be a different payload.
-withPayloadWith :: forall e a b
+withDequeueWith :: forall e a b
                  . Exception e
                 => WithNotifyHandlers
                 -> Connection
@@ -134,8 +116,8 @@ withPayloadWith :: forall e a b
                 -- ^ retry count
                 -> (a -> IO b)
                 -> IO b
-withPayloadWith withNotifyHandlers conn decoder retryCount f = (fix $ \restart i -> do
-    try (withNotifyWith withNotifyHandlers conn (S.withPayload decoder retryCount f) id) >>= \case
+withDequeueWith withNotifyHandlers conn decoder retryCount f = (fix $ \restart i -> do
+    try (withNotifyWith withNotifyHandlers conn (S.withDequeue decoder retryCount f) id) >>= \case
       Right x -> pure x
       Left (e :: e) ->
         if i < retryCount then

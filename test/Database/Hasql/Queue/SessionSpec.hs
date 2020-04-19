@@ -105,30 +105,30 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
       liftIO $ migrate conn intPayloadMigration
 
     it "empty locks nothing" $ \pool -> do
-      runReadCommitted pool (withPayload D.int4 8 return) >>= \x ->
+      runReadCommitted pool (withDequeue D.int4 8 return) >>= \x ->
         x `shouldBe` Nothing
     it "empty gives count 0" $ \pool ->
       runReadCommitted pool getCount `shouldReturn` 0
 
-    it "enqueue/withPayload" $ \pool -> do
-      (withPayloadResult, firstCount, secondCount) <- runReadCommitted pool $ do
+    it "enqueue/withDequeue" $ \pool -> do
+      (withDequeueResult, firstCount, secondCount) <- runReadCommitted pool $ do
         enqueueNotify E.int4 [1]
         firstCount <- getCount
-        withPayloadResult <- withPayload D.int4 8 (`shouldBe` 1)
+        withDequeueResult <- withDequeue D.int4 8 (`shouldBe` 1)
 
         secondCount <- getCount
-        pure (withPayloadResult, firstCount, secondCount)
+        pure (withDequeueResult, firstCount, secondCount)
 
       firstCount `shouldBe` 1
       secondCount `shouldBe` 0
-      withPayloadResult `shouldBe` Just ()
+      withDequeueResult `shouldBe` Just ()
 
-    it "enqueue/withPayload/retries" $ \pool -> do
+    it "enqueue/withDequeue/retries" $ \pool -> do
       e <- E.try $ runImplicitTransaction pool $ do
         void $ enqueue E.int4 [1]
         theCount <- getCount
 
-        void $ withPayload D.int4 8 $ const $
+        void $ withDequeue D.int4 8 $ const $
             throwM $ TooManyRetries theCount
 
       (e :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
@@ -141,25 +141,25 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
         void $ enqueue E.int4 [1]
         theCount <- getCount
 
-        void $ withPayload D.int4 8 $ const $
+        void $ withDequeue D.int4 8 $ const $
             throwM $ TooManyRetries theCount
 
       (e1 :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
 
       replicateM_ 6 $ E.handle (\(_ :: TooManyRetries) -> pure ()) $ runImplicitTransaction pool $ do
-          void $ withPayload D.int4 8 $ const $
+          void $ withDequeue D.int4 8 $ const $
             throwM $ TooManyRetries 1
 
       runImplicitTransaction pool (dequeuePayload D.int4 1) >>= \[(Payload {..})] -> do
         pAttempts `shouldBe` 7
         pValue `shouldBe` 1
 
-    it "enqueue/withPayload/timesout" $ \pool -> do
+    it "enqueue/withDequeue/timesout" $ \pool -> do
       e <- E.try $ runReadCommitted pool $ do
         void $ enqueue E.int4 [1]
         firstCount <- getCount
 
-        void $ withPayload D.int4 1 $ const $
+        void $ withDequeue D.int4 1 $ const $
             throwM $ TooManyRetries firstCount
 
       (e :: Either TooManyRetries ())`shouldBe` Left (TooManyRetries 1)
@@ -167,7 +167,7 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
       runReadCommitted pool getCount `shouldReturn` 0
 
     it "selects the oldest first" $ \pool -> do
-      (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount) <- runReadCommitted pool $ do
+      (firstCount, firstwithDequeueResult, secondwithDequeueResult, secondCount) <- runReadCommitted pool $ do
         enqueue E.int4 [1]
         liftIO $ threadDelay 100
 
@@ -175,14 +175,14 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
 
         firstCount <- getCount
 
-        firstWithPayloadResult   <- withPayload D.int4 8 (`shouldBe` 1)
-        secondWithPayloadResult <- withPayload D.int4 8 (`shouldBe` 2)
+        firstwithDequeueResult   <- withDequeue D.int4 8 (`shouldBe` 1)
+        secondwithDequeueResult <- withDequeue D.int4 8 (`shouldBe` 2)
 
         secondCount <- getCount
-        pure (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount)
+        pure (firstCount, firstwithDequeueResult, secondwithDequeueResult, secondCount)
 
       firstCount `shouldBe` 2
-      firstWithPayloadResult `shouldBe` Just ()
+      firstwithDequeueResult `shouldBe` Just ()
 
       secondCount `shouldBe` 0
-      secondWithPayloadResult `shouldBe` Just ()
+      secondwithDequeueResult `shouldBe` Just ()
