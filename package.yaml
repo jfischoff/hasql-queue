@@ -94,10 +94,6 @@ dependencies:
 
 library:
   source-dirs: src
-  exposed-modules:
-  - Hasql.Queue.Migrate
-  - Hasql.Queue.Session
-  - Hasql.Queue.IO
 
 tests:
   unit-tests:

@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 module Database.Hasql.Queue.SessionSpec where
+import           Hasql.Queue.Internal
 import           Control.Concurrent
 import           Control.Concurrent.Async
 import           Control.Exception as E
@@ -75,6 +76,10 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
 withConnection :: (Connection -> IO ()) -> Pool Connection -> IO ()
 withConnection = flip withResource
 
+runImplicitTransaction :: Pool Connection -> Session a -> IO a
+runImplicitTransaction pool action = withResource pool $ \conn ->
+    either (throwIO . userError . show) pure =<< run action conn
+
 runReadCommitted :: Pool Connection -> Session a -> IO a
 runReadCommitted = flip withReadCommitted
 
@@ -107,12 +112,9 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
 
     it "enqueue/withPayload" $ \pool -> do
       (withPayloadResult, firstCount, secondCount) <- runReadCommitted pool $ do
-        payloadId <- enqueueNotify E.int4 [1]
+        enqueueNotify E.int4 [1]
         firstCount <- getCount
-        withPayloadResult <- withPayload D.int4 8 (\(Payload {..}) -> do
-            [pId] `shouldBe` payloadId
-            pValue `shouldBe` 1
-          )
+        withPayloadResult <- withPayload D.int4 8 (`shouldBe` 1)
 
         secondCount <- getCount
         pure (withPayloadResult, firstCount, secondCount)
@@ -121,38 +123,44 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
       secondCount `shouldBe` 0
       withPayloadResult `shouldBe` Just ()
 
-    it "enqueue_/dequeueValues" $ \pool -> do
-      let initial = 2
-      actual <- runReadCommitted pool $ do
-        enqueue_ E.int4 [initial]
-        dequeueValues D.int4 1
-
-      actual `shouldBe` [initial]
-
     it "enqueue/withPayload/retries" $ \pool -> do
-      e <- E.try $ runReadCommitted pool $ do
+      e <- E.try $ runImplicitTransaction pool $ do
         void $ enqueue E.int4 [1]
         theCount <- getCount
 
-        replicateM_ 7 $ withPayload D.int4 8 (\(Payload {..}) ->
+        void $ withPayload D.int4 8 $ const $
             throwM $ TooManyRetries theCount
-          )
 
       (e :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
 
-      void $ runReadCommitted pool $ withPayload D.int4 8 (\(Payload {..}) -> do
+      runImplicitTransaction pool (dequeuePayload D.int4 1) >>= \[(Payload {..})] -> do
+        pAttempts `shouldBe` 1
+        pValue `shouldBe` 1
+
+      e1 <- E.try $ runImplicitTransaction pool $ do
+        void $ enqueue E.int4 [1]
+        theCount <- getCount
+
+        void $ withPayload D.int4 8 $ const $
+            throwM $ TooManyRetries theCount
+
+      (e1 :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
+
+      replicateM_ 6 $ E.handle (\(_ :: TooManyRetries) -> pure ()) $ runImplicitTransaction pool $ do
+          void $ withPayload D.int4 8 $ const $
+            throwM $ TooManyRetries 1
+
+      runImplicitTransaction pool (dequeuePayload D.int4 1) >>= \[(Payload {..})] -> do
         pAttempts `shouldBe` 7
         pValue `shouldBe` 1
-        )
 
     it "enqueue/withPayload/timesout" $ \pool -> do
       e <- E.try $ runReadCommitted pool $ do
         void $ enqueue E.int4 [1]
         firstCount <- getCount
 
-        replicateM_ 2 $ withPayload D.int4 1 (\(Payload {..}) ->
+        void $ withPayload D.int4 1 $ const $
             throwM $ TooManyRetries firstCount
-          )
 
       (e :: Either TooManyRetries ())`shouldBe` Left (TooManyRetries 1)
 
@@ -160,22 +168,15 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
 
     it "selects the oldest first" $ \pool -> do
       (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount) <- runReadCommitted pool $ do
-        payloadId0 <- enqueue E.int4 [1]
+        enqueue E.int4 [1]
         liftIO $ threadDelay 100
 
-        payloadId1 <- enqueue E.int4 [2]
+        enqueue E.int4 [2]
 
         firstCount <- getCount
 
-        firstWithPayloadResult <- withPayload D.int4 8 (\(Payload {..}) -> do
-            [pId] `shouldBe` payloadId0
-            pValue `shouldBe` 1
-          )
-
-        secondWithPayloadResult <- withPayload D.int4 8 (\(Payload {..}) -> do
-            [pId] `shouldBe` payloadId1
-            pValue `shouldBe` 2
-          )
+        firstWithPayloadResult   <- withPayload D.int4 8 (`shouldBe` 1)
+        secondWithPayloadResult <- withPayload D.int4 8 (`shouldBe` 2)
 
         secondCount <- getCount
         pure (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount)
