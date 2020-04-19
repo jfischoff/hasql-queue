@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 module Database.Hasql.Queue.SessionSpec where
+import           Hasql.Queue.Internal
 import           Control.Concurrent
 import           Control.Concurrent.Async
 import           Control.Exception as E
@@ -75,6 +76,10 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
 withConnection :: (Connection -> IO ()) -> Pool Connection -> IO ()
 withConnection = flip withResource
 
+runImplicitTransaction :: Pool Connection -> Session a -> IO a
+runImplicitTransaction pool action = withResource pool $ \conn ->
+    either (throwIO . userError . show) pure =<< run action conn
+
 runReadCommitted :: Pool Connection -> Session a -> IO a
 runReadCommitted = flip withReadCommitted
 
@@ -100,88 +105,116 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
       liftIO $ migrate conn intPayloadMigration
 
     it "empty locks nothing" $ \pool -> do
-      runReadCommitted pool (withPayload D.int4 8 return) >>= \x ->
+      runReadCommitted pool (withDequeue D.int4 8 return) >>= \x ->
         x `shouldBe` Nothing
     it "empty gives count 0" $ \pool ->
       runReadCommitted pool getCount `shouldReturn` 0
 
-    it "enqueue/withPayload" $ \pool -> do
-      (withPayloadResult, firstCount, secondCount) <- runReadCommitted pool $ do
-        payloadId <- enqueueNotify E.int4 [1]
+    it "dequeued paging works" $ \pool -> do
+      (a, b) <- runReadCommitted pool $ do
+        enqueue E.int4 [1,2,3,4]
+
+        void $ dequeue D.int4 4
+
+        (next, xs) <- dequeued D.int4 Nothing 2
+
+        (_, ys) <- dequeued D.int4 (Just next) 2
+
+        pure (xs, ys)
+
+      a `shouldBe` [1,2]
+      b `shouldBe` [3,4]
+
+    it "failed paging works" $ \pool -> do
+      runImplicitTransaction pool $ enqueue E.int4 [1,2,3,4]
+
+      replicateM_ 8 $ E.handle (\(_ :: TooManyRetries) -> pure ()) $
+        runImplicitTransaction pool $ do
+          void $ withDequeue D.int4 1 $ const $
+            throwM $ TooManyRetries 1
+
+      (a, b) <- runImplicitTransaction pool $ do
+        (next, xs) <- failed D.int4 Nothing 2
+        (_, ys) <- failed D.int4 (Just next) 2
+
+        pure (xs, ys)
+
+      a `shouldBe` [1,2]
+      b `shouldBe` [3,4]
+
+    it "enqueue/withDequeue" $ \pool -> do
+      (withDequeueResult, firstCount, secondCount) <- runReadCommitted pool $ do
+        enqueueNotify E.int4 [1]
         firstCount <- getCount
-        withPayloadResult <- withPayload D.int4 8 (\(Payload {..}) -> do
-            [pId] `shouldBe` payloadId
-            pValue `shouldBe` 1
-          )
+        withDequeueResult <- withDequeue D.int4 8 (`shouldBe` 1)
 
         secondCount <- getCount
-        pure (withPayloadResult, firstCount, secondCount)
+        pure (withDequeueResult, firstCount, secondCount)
 
       firstCount `shouldBe` 1
       secondCount `shouldBe` 0
-      withPayloadResult `shouldBe` Just ()
+      withDequeueResult `shouldBe` Just ()
 
-    it "enqueue_/dequeueValues" $ \pool -> do
-      let initial = 2
-      actual <- runReadCommitted pool $ do
-        enqueue_ E.int4 [initial]
-        dequeueValues D.int4 1
-
-      actual `shouldBe` [initial]
-
-    it "enqueue/withPayload/retries" $ \pool -> do
-      e <- E.try $ runReadCommitted pool $ do
+    it "enqueue/withDequeue/retries" $ \pool -> do
+      e <- E.try $ runImplicitTransaction pool $ do
         void $ enqueue E.int4 [1]
         theCount <- getCount
 
-        replicateM_ 7 $ withPayload D.int4 8 (\(Payload {..}) ->
+        void $ withDequeue D.int4 8 $ const $
             throwM $ TooManyRetries theCount
-          )
 
       (e :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
 
-      void $ runReadCommitted pool $ withPayload D.int4 8 (\(Payload {..}) -> do
+      runImplicitTransaction pool (dequeuePayload D.int4 1) >>= \[(Payload {..})] -> do
+        pAttempts `shouldBe` 1
+        pValue `shouldBe` 1
+
+      e1 <- E.try $ runImplicitTransaction pool $ do
+        void $ enqueue E.int4 [1]
+        theCount <- getCount
+
+        void $ withDequeue D.int4 8 $ const $
+            throwM $ TooManyRetries theCount
+
+      (e1 :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
+
+      replicateM_ 6 $ E.handle (\(_ :: TooManyRetries) -> pure ()) $ runImplicitTransaction pool $ do
+          void $ withDequeue D.int4 8 $ const $
+            throwM $ TooManyRetries 1
+
+      runImplicitTransaction pool (dequeuePayload D.int4 1) >>= \[(Payload {..})] -> do
         pAttempts `shouldBe` 7
         pValue `shouldBe` 1
-        )
 
-    it "enqueue/withPayload/timesout" $ \pool -> do
+    it "enqueue/withDequeue/timesout" $ \pool -> do
       e <- E.try $ runReadCommitted pool $ do
-        void $ enqueue E.int4 [1]
+        enqueue E.int4 [1]
         firstCount <- getCount
 
-        replicateM_ 2 $ withPayload D.int4 1 (\(Payload {..}) ->
+        void $ withDequeue D.int4 1 $ const $
             throwM $ TooManyRetries firstCount
-          )
 
       (e :: Either TooManyRetries ())`shouldBe` Left (TooManyRetries 1)
 
       runReadCommitted pool getCount `shouldReturn` 0
 
     it "selects the oldest first" $ \pool -> do
-      (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount) <- runReadCommitted pool $ do
-        payloadId0 <- enqueue E.int4 [1]
+      (firstCount, firstwithDequeueResult, secondwithDequeueResult, secondCount) <- runReadCommitted pool $ do
+        enqueue E.int4 [1]
         liftIO $ threadDelay 100
 
-        payloadId1 <- enqueue E.int4 [2]
+        enqueue E.int4 [2]
 
         firstCount <- getCount
 
-        firstWithPayloadResult <- withPayload D.int4 8 (\(Payload {..}) -> do
-            [pId] `shouldBe` payloadId0
-            pValue `shouldBe` 1
-          )
-
-        secondWithPayloadResult <- withPayload D.int4 8 (\(Payload {..}) -> do
-            [pId] `shouldBe` payloadId1
-            pValue `shouldBe` 2
-          )
+        firstwithDequeueResult   <- withDequeue D.int4 8 (`shouldBe` 1)
+        secondwithDequeueResult <- withDequeue D.int4 8 (`shouldBe` 2)
 
         secondCount <- getCount
-        pure (firstCount, firstWithPayloadResult, secondWithPayloadResult, secondCount)
+        pure (firstCount, firstwithDequeueResult, secondwithDequeueResult, secondCount)
 
       firstCount `shouldBe` 2
-      firstWithPayloadResult `shouldBe` Just ()
+      firstwithDequeueResult `shouldBe` Just ()
 
       secondCount `shouldBe` 0
-      secondWithPayloadResult `shouldBe` Just ()
+      secondwithDequeueResult `shouldBe` Just ()
