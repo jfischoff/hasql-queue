@@ -110,6 +110,38 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
     it "empty gives count 0" $ \pool ->
       runReadCommitted pool getCount `shouldReturn` 0
 
+    it "dequeued paging works" $ \pool -> do
+      (a, b) <- runReadCommitted pool $ do
+        enqueue E.int4 [1,2,3,4]
+
+        void $ dequeue D.int4 4
+
+        (next, xs) <- dequeued D.int4 Nothing 2
+
+        (_, ys) <- dequeued D.int4 (Just next) 2
+
+        pure (xs, ys)
+
+      a `shouldBe` [1,2]
+      b `shouldBe` [3,4]
+
+    it "failed paging works" $ \pool -> do
+      runImplicitTransaction pool $ enqueue E.int4 [1,2,3,4]
+
+      replicateM_ 8 $ E.handle (\(_ :: TooManyRetries) -> pure ()) $
+        runImplicitTransaction pool $ do
+          void $ withDequeue D.int4 1 $ const $
+            throwM $ TooManyRetries 1
+
+      (a, b) <- runImplicitTransaction pool $ do
+        (next, xs) <- failed D.int4 Nothing 2
+        (_, ys) <- failed D.int4 (Just next) 2
+
+        pure (xs, ys)
+
+      a `shouldBe` [1,2]
+      b `shouldBe` [3,4]
+
     it "enqueue/withDequeue" $ \pool -> do
       (withDequeueResult, firstCount, secondCount) <- runReadCommitted pool $ do
         enqueueNotify E.int4 [1]
@@ -156,7 +188,7 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
 
     it "enqueue/withDequeue/timesout" $ \pool -> do
       e <- E.try $ runReadCommitted pool $ do
-        void $ enqueue E.int4 [1]
+        enqueue E.int4 [1]
         firstCount <- getCount
 
         void $ withDequeue D.int4 1 $ const $

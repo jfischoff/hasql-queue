@@ -136,7 +136,7 @@ listState theState valueDecoder mPayloadId count = do
   let theQuery = [here|
         SELECT id, value
         FROM payloads
-        WHERE state = $1
+        WHERE state = ($1 :: state_t)
           AND id > $2
         ORDER BY id ASC
         LIMIT $3
