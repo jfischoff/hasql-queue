@@ -1,9 +1,8 @@
 module Main where
 import System.Environment
-import Hasql.Queue.IO
-import Hasql.Queue.Migrate
-import Data.IORef
-import Control.Exception
+import           Hasql.Queue.Migrate
+import           Data.IORef
+import           Control.Exception
 import           Crypto.Hash.SHA1 (hash)
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Char8 as BSC
@@ -17,6 +16,8 @@ import           Data.Function
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Hasql.Statement
+import qualified Hasql.Queue.Internal as I
+import qualified Hasql.Queue.Session as S
 import           Data.Int
 
 -- TODO need to make sure the number of producers and consumers does not go over the number of connections
@@ -64,9 +65,9 @@ main = do
 
   flip finally printCounters $ withSetup $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
-    let enqueueAction = void $ withResource pool $ \conn -> enqueue_ conn E.int4 [payload]
+    let enqueueAction = void $ withResource pool $ \conn -> I.runThrow (S.enqueue E.int4 [payload]) conn
         dequeueAction = void $ withResource pool $ \conn -> fix $ \next ->
-          dequeueValues conn D.int4 batchCount >>= \case
+          I.runThrow (S.dequeue D.int4 batchCount) conn >>= \case
               [] -> next
               _ -> pure ()
 
