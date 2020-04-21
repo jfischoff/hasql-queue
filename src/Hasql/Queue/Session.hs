@@ -2,11 +2,10 @@ module Hasql.Queue.Session
   ( enqueue
   , enqueueNotify
   , dequeue
-  , withDequeue
   , failed
   , dequeued
   , getCount
-  , PayloadId (..)
+  , PayloadId
   ) where
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
@@ -14,9 +13,6 @@ import           Hasql.Session
 import           Data.Functor.Contravariant
 import           Data.String.Here.Uninterpolated
 import           Hasql.Statement
-import           Control.Exception
-import           Control.Monad.IO.Class
-import           Control.Monad (when)
 import           Hasql.Queue.Internal
 import           Data.Maybe
 
@@ -76,51 +72,6 @@ dequeue valueDecoder count = do
         1 -> Statement singleQuery singleEncoder decoder True
         _ -> Statement multipleQuery multipleEncoder decoder True
   statement count theStatement
-
-getEnqueue :: D.Value a -> Session (Maybe (Payload a))
-getEnqueue decoder = statement () $ state mempty (D.rowMaybe $ payloadDecoder decoder) [here|
-    SELECT id, state, attempts, modified_at, value
-    FROM payloads
-    WHERE state='enqueued'
-    ORDER BY modified_at ASC
-    FOR UPDATE SKIP LOCKED
-    LIMIT 1;
-  |]
-
-setDequeued :: PayloadId -> Session ()
-setDequeued thePid = statement thePid $ state (E.param (E.nonNullable payloadIdEncoder)) D.noResult [here|
-    UPDATE payloads SET state='dequeued' WHERE id = $1
-  |]
-
-setEnqueueWithCount :: PayloadId -> Int -> Session ()
-setEnqueueWithCount thePid retries = do
-  let encoder = (fst >$< E.param (E.nonNullable payloadIdEncoder)) <>
-                (snd >$< E.param (E.nonNullable E.int4))
-  statement (thePid, fromIntegral retries) $ state encoder D.noResult [here|
-    UPDATE payloads SET state='enqueued', modified_at=nextval('modified_index'), attempts=$2 WHERE id = $1
-  |]
-
-setFailed :: PayloadId -> Session ()
-setFailed thePid = do
-  let encoder = E.param (E.nonNullable payloadIdEncoder)
-  statement thePid $ state encoder D.noResult [here|
-    UPDATE payloads SET state='failed' WHERE id = $1
-  |]
-
--- | Dequeue and
-withDequeue :: D.Value a -> Int -> (a -> IO b) -> Session (Maybe b)
-withDequeue decoder retryCount f = getEnqueue decoder >>= \case
-  Nothing -> pure Nothing
-  Just Payload {..} -> fmap Just $ do
-    setDequeued pId
-
-    let updateStateOnFailure = do
-          setEnqueueWithCount pId (pAttempts + 1)
-          when (pAttempts >= retryCount) $ setFailed pId
-
-    liftIO (try $ f pValue) >>= \case
-      Left  (e :: SomeException) -> updateStateOnFailure >> liftIO (throwIO e)
-      Right x -> pure x
 
 fst3 :: (a, b, c) -> a
 fst3 (x, _, _) = x

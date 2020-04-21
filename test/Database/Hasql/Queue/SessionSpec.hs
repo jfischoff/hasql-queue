@@ -77,8 +77,12 @@ withConnection :: (Connection -> IO ()) -> Pool Connection -> IO ()
 withConnection = flip withResource
 
 runImplicitTransaction :: Pool Connection -> Session a -> IO a
-runImplicitTransaction pool action = withResource pool $ \conn ->
-    either (throwIO . userError . show) pure =<< run action conn
+runImplicitTransaction pool action = do
+  let wrappedAction = do
+        r <- action
+        pure r
+  withResource pool $ \conn ->
+    either (throwIO . userError . show) pure =<< run wrappedAction conn
 
 runReadCommitted :: Pool Connection -> Session a -> IO a
 runReadCommitted = flip withReadCommitted
@@ -156,8 +160,9 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
       withDequeueResult `shouldBe` Just ()
 
     it "enqueue/withDequeue/retries" $ \pool -> do
+      runImplicitTransaction pool $ enqueue E.int4 [1]
+
       e <- E.try $ runImplicitTransaction pool $ do
-        void $ enqueue E.int4 [1]
         theCount <- getCount
 
         void $ withDequeue D.int4 8 $ const $
@@ -169,8 +174,9 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
         pAttempts `shouldBe` 1
         pValue `shouldBe` 1
 
+      runImplicitTransaction pool $ enqueue E.int4 [1]
+
       e1 <- E.try $ runImplicitTransaction pool $ do
-        void $ enqueue E.int4 [1]
         theCount <- getCount
 
         void $ withDequeue D.int4 8 $ const $
@@ -191,7 +197,7 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
         enqueue E.int4 [1]
         firstCount <- getCount
 
-        void $ withDequeue D.int4 1 $ const $
+        void $ withDequeue D.int4 0 $ const $
             throwM $ TooManyRetries firstCount
 
       (e :: Either TooManyRetries ())`shouldBe` Left (TooManyRetries 1)

@@ -1,92 +1,27 @@
 module Hasql.Queue.IO
-  ( withNotify
-  , withNotifyWith
-  , enqueue
+  ( enqueue
   , withDequeue
   , withDequeueWith
-  , WithNotifyHandlers (..)
-  , QueryException (..)
+  , failed
+  , dequeued
+  , I.WithNotifyHandlers (..)
+  , I.QueryException (..)
+  , I.PayloadId
   ) where
 
 import qualified Hasql.Queue.Session as S
+import qualified Hasql.Queue.Internal as I
 import           Hasql.Connection
-import           Hasql.Session
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Control.Exception
-import           Data.ByteString (ByteString)
-import           Data.Typeable
 import           Data.Function
-import           Data.String
-import           Hasql.Notification
-import           Control.Monad
 
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
--- TODO remove
-newtype QueryException = QueryException QueryError
-  deriving (Eq, Show, Typeable)
-
-instance Exception QueryException
-
-runThrow :: Session a -> Connection -> IO a
-runThrow sess conn = either (throwIO . QueryException) pure =<< run sess conn
-
-execute :: Connection -> ByteString -> IO ()
-execute conn theSql = runThrow (sql theSql) conn
-
-notifyName :: IsString s => s
-notifyName = fromString "postgresql_simple_enqueue"
-
--- Block until a payload notification is fired. Fired during insertion.
-notifyPayload :: Connection -> IO ()
-notifyPayload conn = do
-  Notification {..} <- either throwIO pure =<< getNotification conn
-  unless (notificationChannel == notifyName) $ notifyPayload conn
-
-transaction :: Session a -> Session a
-transaction inner = do
-  sql "BEGIN"
-  r <- inner
-  sql "COMMIT"
-  pure r
-
--- | To aid in observability and white box testing
-data WithNotifyHandlers = WithNotifyHandlers
-  { withNotifyHandlersAfterAction :: IO ()
-  , withNotifyHandlersBefore      :: IO ()
-  }
-
-instance Semigroup WithNotifyHandlers where
-  x <> y = WithNotifyHandlers
-    { withNotifyHandlersAfterAction = withNotifyHandlersAfterAction x <> withNotifyHandlersAfterAction y
-    , withNotifyHandlersBefore      = withNotifyHandlersBefore      x <> withNotifyHandlersBefore      y
-    }
-
-instance Monoid WithNotifyHandlers where
-  mempty = WithNotifyHandlers mempty mempty
-
-withNotifyWith :: WithNotifyHandlers -> Connection -> Session a -> (a -> Maybe b) -> IO b
-withNotifyWith WithNotifyHandlers {..} conn action theCast = bracket_
-  (execute conn $ "LISTEN " <> notifyName)
-  (execute conn $ "UNLISTEN " <> notifyName)
-  $ fix $ \restart -> do
-    x <- runThrow (transaction action) conn
-    withNotifyHandlersAfterAction
-    case theCast x of
-      Nothing -> do
-        -- TODO record the time here
-        withNotifyHandlersBefore
-        notifyPayload conn
-        restart
-      Just xs -> pure xs
-
-withNotify :: Connection -> Session a -> (a -> Maybe b) -> IO b
-withNotify = withNotifyWith mempty
-
 enqueue :: Connection -> E.Value a -> [a] -> IO ()
-enqueue conn encoder xs = runThrow (S.enqueueNotify encoder xs) conn
+enqueue conn encoder xs = I.runThrow (S.enqueueNotify encoder xs) conn
 
 {-|
 
@@ -96,20 +31,20 @@ maximum. Return `Nothing` is the `payloads` table is empty otherwise the result 
 from the payload ingesting function.
 
 -}
-withDequeue :: forall a b. Connection
+withDequeue :: Connection
             -> D.Value a
             -> Int
             -- ^ retry count
             -> (a -> IO b)
             -> IO b
-withDequeue = withDequeueWith @IOException mempty
+withDequeue = withDequeueWith @IOError mempty
 
 -- The issue I have is the retry logic is it will retry a certain numbers of times
 -- but that doesn't mean that it is retrying the same element each time.
 -- It could return 8 times and it could be a different payload.
 withDequeueWith :: forall e a b
                  . Exception e
-                => WithNotifyHandlers
+                => I.WithNotifyHandlers
                 -> Connection
                 -> D.Value a
                 -> Int
@@ -117,7 +52,7 @@ withDequeueWith :: forall e a b
                 -> (a -> IO b)
                 -> IO b
 withDequeueWith withNotifyHandlers conn decoder retryCount f = (fix $ \restart i -> do
-    try (withNotifyWith withNotifyHandlers conn (S.withDequeue decoder retryCount f) id) >>= \case
+    try (I.withNotifyWith withNotifyHandlers conn (I.withDequeue decoder retryCount f) id) >>= \case
       Right x -> pure x
       Left (e :: e) ->
         if i < retryCount then
@@ -125,3 +60,9 @@ withDequeueWith withNotifyHandlers conn decoder retryCount f = (fix $ \restart i
         else
           throwIO e
   ) 0
+
+failed :: Connection -> D.Value a -> Maybe I.PayloadId -> Int -> IO (I.PayloadId, [a])
+failed conn decoder mPayload count = I.runThrow (S.failed decoder mPayload count) conn
+
+dequeued :: Connection -> D.Value a -> Maybe I.PayloadId -> Int -> IO (I.PayloadId, [a])
+dequeued conn decoder mPayload count = I.runThrow (S.dequeued decoder mPayload count) conn
