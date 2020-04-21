@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 647f740535bf88a7c178ca2b1eb2b452786c3ac375297641956e56f12199c06e
+-- hash: e91c374c2ee30724ee0f937315490109721651043423c6eb397e1a7c6c042a46
 
 name:           hasql-queue
 version:        1.0.1
@@ -77,6 +77,36 @@ library
     , stm
     , text
     , time
+    , transformers
+  default-language: Haskell2010
+
+executable benchmark
+  main-is: Main.hs
+  other-modules:
+      Paths_hasql_queue
+  hs-source-dirs:
+      benchmarks
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N -g2
+  build-depends:
+      aeson
+    , async
+    , base >=4.7 && <5
+    , base64-bytestring
+    , bytestring
+    , cryptohash-sha1
+    , exceptions
+    , hasql
+    , hasql-notifications
+    , hasql-queue
+    , here
+    , monad-control
+    , random
+    , resource-pool
+    , stm
+    , text
+    , time
+    , tmp-postgres
     , transformers
   default-language: Haskell2010
 

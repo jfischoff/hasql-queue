@@ -2,11 +2,20 @@ module Hasql.Queue.Internal where
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Hasql.Session
+import           Hasql.Notification
+import           Control.Monad (unless)
+import           Data.Function(fix)
+import           Hasql.Connection
+import           Data.String
 import           Data.Int
 import           Data.Functor.Contravariant
 import           Data.String.Here.Uninterpolated
 import           Hasql.Statement
 import           Data.ByteString (ByteString)
+import           Control.Exception
+import           Control.Monad.IO.Class
+import           Control.Monad (when)
+import           Data.Typeable
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -156,3 +165,90 @@ getCount = do
         |]
       theStatement = Statement theSql mempty decoder True
   statement () theStatement
+
+setEnqueueWithCount :: PayloadId -> Int -> Session ()
+setEnqueueWithCount thePid retries = do
+  let encoder = (fst >$< E.param (E.nonNullable payloadIdEncoder)) <>
+                (snd >$< E.param (E.nonNullable E.int4))
+  statement (thePid, fromIntegral retries) $ state encoder D.noResult [here|
+    UPDATE payloads SET state='enqueued', modified_at=nextval('modified_index'), attempts=$2 WHERE id = $1
+  |]
+
+setFailed :: PayloadId -> Session ()
+setFailed thePid = do
+  let encoder = E.param (E.nonNullable payloadIdEncoder)
+  statement thePid $ state encoder D.noResult [here|
+    UPDATE payloads SET state='failed' WHERE id = $1
+  |]
+-- | Dequeue and
+--   Move to Internal
+-- This should use bracketOnError
+withDequeue :: D.Value a -> Int -> (a -> IO b) -> Session (Maybe b)
+withDequeue decoder retryCount f = do
+  sql "BEGIN;SAVEPOINT temp"
+  dequeuePayload decoder 1 >>= \case
+    [] ->  Nothing <$ sql "COMMIT"
+    [Payload {..}] -> fmap Just $ do
+      liftIO (try $ f pValue) >>= \case
+        Left  (e :: SomeException) -> do
+           sql "ROLLBACK TO SAVEPOINT temp; RELEASE SAVEPOINT temp"
+           setEnqueueWithCount pId (pAttempts + 1)
+           when (pAttempts >= retryCount) $ setFailed pId
+           sql "COMMIT"
+           liftIO (throwIO e)
+        Right x ->  x <$ sql "COMMIT"
+    _ -> pure Nothing
+
+-- TODO remove
+newtype QueryException = QueryException QueryError
+  deriving (Eq, Show, Typeable)
+
+instance Exception QueryException
+
+runThrow :: Session a -> Connection -> IO a
+runThrow sess conn = either (throwIO . QueryException) pure =<< run sess conn
+
+execute :: Connection -> ByteString -> IO ()
+execute conn theSql = runThrow (sql theSql) conn
+
+notifyName :: IsString s => s
+notifyName = fromString "postgresql_simple_enqueue"
+
+-- Block until a payload notification is fired. Fired during insertion.
+notifyPayload :: Connection -> IO ()
+notifyPayload conn = do
+  Notification {..} <- either throwIO pure =<< getNotification conn
+  unless (notificationChannel == notifyName) $ notifyPayload conn
+
+-- | To aid in observability and white box testing
+data WithNotifyHandlers = WithNotifyHandlers
+  { withNotifyHandlersAfterAction :: IO ()
+  , withNotifyHandlersBefore      :: IO ()
+  }
+
+instance Semigroup WithNotifyHandlers where
+  x <> y = WithNotifyHandlers
+    { withNotifyHandlersAfterAction = withNotifyHandlersAfterAction x <> withNotifyHandlersAfterAction y
+    , withNotifyHandlersBefore      = withNotifyHandlersBefore      x <> withNotifyHandlersBefore      y
+    }
+
+instance Monoid WithNotifyHandlers where
+  mempty = WithNotifyHandlers mempty mempty
+
+withNotifyWith :: WithNotifyHandlers -> Connection -> Session a -> (a -> Maybe b) -> IO b
+withNotifyWith WithNotifyHandlers {..} conn action theCast = bracket_
+  (execute conn $ "LISTEN " <> notifyName)
+  (execute conn $ "UNLISTEN " <> notifyName)
+  $ fix $ \restart -> do
+    x <- runThrow action conn
+    withNotifyHandlersAfterAction
+    case theCast x of
+      Nothing -> do
+        -- TODO record the time here
+        withNotifyHandlersBefore
+        notifyPayload conn
+        restart
+      Just xs -> pure xs
+
+withNotify :: Connection -> Session a -> (a -> Maybe b) -> IO b
+withNotify = withNotifyWith mempty

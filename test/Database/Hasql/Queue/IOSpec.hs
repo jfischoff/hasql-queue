@@ -101,6 +101,12 @@ withReadCommitted action pool = do
   withResource pool $ \conn ->
     either (throwIO . userError . show) pure =<< run wrappedAction conn
 
+{-
+runNoTransaction :: Pool Connection -> Session a -> IO a
+runNoTransaction pool session = withResource pool $ \conn ->
+  either (throwIO . userError . show) pure =<< run action conn
+-}
+
 data FailedwithDequeue = FailedwithDequeue
   deriving (Show, Eq, Typeable)
 
@@ -113,6 +119,7 @@ spec = describe "Hasql.Queue.IO" $ do
       void $ enqueue conn E.int4 [1]
       res <- withDequeueWith @IOException mempty conn D.int4 1 pure
       res `shouldBe` 1
+      getCount conn `shouldReturn` 0
 
     it "withDequeue blocks until something is enqueued: during" $ withConnection $ \conn -> do
       afterActionMVar  <- newEmptyMVar
