@@ -18,16 +18,28 @@ import           Data.Maybe
 import           Data.ByteString (ByteString)
 
 enqueue :: E.Value a -> [a] -> Session ()
-enqueue theEncoder values = do
-  let theQuery = [here|
-        INSERT INTO payloads (attempts, value)
-        SELECT 0, * FROM unnest($1)
-        |]
-      encoder = E.param $ E.nonNullable $ E.foldableArray $ E.nonNullable theEncoder
-      decoder = D.noResult
-      theStatement = Statement theQuery encoder decoder True
+enqueue theEncoder = \case
+  [x] -> do
+    let theQuery =
+          [here|
+            INSERT INTO payloads (attempts, value)
+            VALUES (0, $1)
+          |]
 
-  statement values theStatement
+        encoder = E.param $ E.nonNullable theEncoder
+
+    statement x $ Statement theQuery encoder D.noResult True
+
+  xs -> do
+    let theQuery =
+          [here|
+            INSERT INTO payloads (attempts, value)
+            SELECT 0, * FROM unnest($1)
+          |]
+
+        encoder = E.param $ E.nonNullable $ E.foldableArray $ E.nonNullable theEncoder
+
+    statement xs $ Statement theQuery encoder D.noResult True
 
 enqueueNotify :: ByteString -> E.Value a -> [a] -> Session ()
 enqueueNotify channel theEncoder values = do
