@@ -22,6 +22,7 @@ import           Data.Foldable
 import           Crypto.Hash.SHA1 (hash)
 import qualified Data.ByteString.Base64.URL as Base64
 import qualified Data.ByteString.Char8 as BSC
+import           Data.ByteString (ByteString)
 import           Hasql.Connection
 import           Hasql.Session
 import qualified Hasql.Encoders as E
@@ -85,6 +86,9 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
       60
       50
 
+channel :: ByteString
+channel = "hey"
+
 withConnection :: (Connection -> IO ()) -> Pool Connection -> IO ()
 withConnection = flip withResource
 
@@ -116,8 +120,8 @@ spec :: Spec
 spec = describe "Hasql.Queue.IO" $ do
   aroundAll withSetup $ describe "basic" $ do
     it "withDequeue blocks until something is enqueued: before" $ withConnection $ \conn -> do
-      void $ enqueue conn E.int4 [1]
-      res <- withDequeueWith @IOException mempty conn D.int4 1 pure
+      void $ enqueue channel conn E.int4 [1]
+      res <- withDequeueWith @IOException mempty channel conn D.int4 1 pure
       res `shouldBe` 1
       getCount conn `shouldReturn` 0
 
@@ -131,24 +135,24 @@ spec = describe "Hasql.Queue.IO" $ do
             }
 
       -- This is the definition of IO.dequeue
-      resultThread <- async $ withDequeueWith @IOException handlers conn D.int4 1 pure
+      resultThread <- async $ withDequeueWith @IOException handlers channel conn D.int4 1 pure
       takeMVar afterActionMVar
 
-      void $ enqueue conn E.int4 [1]
+      void $ enqueue "hey" conn E.int4 [1]
 
       putMVar beforeNotifyMVar ()
 
       wait resultThread `shouldReturn` 1
 
     it "withDequeue blocks until something is enqueued: after" $ withConnection $ \conn -> do
-      resultThread <- async $ withDequeueWith @IOException mempty conn D.int4 1 pure
-      void $ enqueue conn E.int4 [1]
+      resultThread <- async $ withDequeueWith @IOException mempty channel conn D.int4 1 pure
+      void $ enqueue channel conn E.int4 [1]
 
       wait resultThread `shouldReturn` 1
 
     it "withDequeue fails and sets the retries to +1" $ withConnection $ \conn -> do
       [payloadId] <- runThrow (I.enqueuePayload E.int4 [1]) conn
-      handle (\FailedwithDequeue -> pure ()) $ withDequeue conn D.int4 0 $ \_ -> throwIO FailedwithDequeue
+      handle (\FailedwithDequeue -> pure ()) $ withDequeue channel conn D.int4 0 $ \_ -> throwIO FailedwithDequeue
       Just Payload {..} <- getPayload conn D.int4 payloadId
 
       pState `shouldBe` I.Failed
@@ -159,7 +163,7 @@ spec = describe "Hasql.Queue.IO" $ do
 
       ref <- newIORef (0 :: Int)
 
-      withDequeueWith @FailedwithDequeue mempty conn D.int4 1 (\_ -> do
+      withDequeueWith @FailedwithDequeue mempty channel conn D.int4 1 (\_ -> do
         count <- readIORef ref
         writeIORef ref $ count + 1
         when (count < 1) $ throwIO FailedwithDequeue
@@ -179,7 +183,7 @@ spec = describe "Hasql.Queue.IO" $ do
       ref <- newTVarIO []
 
       loopThreads <- replicateM 35 $ async $ withPool' $ \c -> fix $ \next -> do
-        lastCount <- withDequeue c D.int4 1 $ \x -> do
+        lastCount <- withDequeue channel c D.int4 1 $ \x -> do
           atomically $ do
             xs <- readTVar ref
             writeTVar ref $ x : xs
@@ -188,7 +192,7 @@ spec = describe "Hasql.Queue.IO" $ do
         when (lastCount < elementCount) next
 
       forM_ (chunksOf (elementCount `div` 11) expected) $ \xs -> forkIO $ void $ withPool' $ \c ->
-         forM_ xs $ \i -> enqueue c E.int4 [fromIntegral i]
+         forM_ xs $ \i -> enqueue channel c E.int4 [fromIntegral i]
 
       _ <- waitAnyCancel loopThreads
       xs <- atomically $ readTVar ref

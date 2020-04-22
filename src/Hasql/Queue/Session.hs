@@ -15,6 +15,7 @@ import           Data.String.Here.Uninterpolated
 import           Hasql.Statement
 import           Hasql.Queue.Internal
 import           Data.Maybe
+import           Data.ByteString (ByteString)
 
 enqueue :: E.Value a -> [a] -> Session ()
 enqueue theEncoder values = do
@@ -28,10 +29,10 @@ enqueue theEncoder values = do
 
   statement values theStatement
 
-enqueueNotify :: E.Value a -> [a] -> Session ()
-enqueueNotify theEncoder values = do
+enqueueNotify :: ByteString -> E.Value a -> [a] -> Session ()
+enqueueNotify channel theEncoder values = do
   enqueue theEncoder values
-  sql "NOTIFY postgresql_simple_enqueue"
+  sql $ "NOTIFY " <> channel
 
 dequeue :: D.Value a -> Int -> Session [a]
 dequeue valueDecoder count = do

@@ -6,7 +6,6 @@ import           Hasql.Notification
 import           Control.Monad (unless)
 import           Data.Function(fix)
 import           Hasql.Connection
-import           Data.String
 import           Data.Int
 import           Data.Functor.Contravariant
 import           Data.String.Here.Uninterpolated
@@ -80,12 +79,6 @@ payloadIdDecoder = PayloadId <$> D.int8
 
 payloadIdRow :: D.Row PayloadId
 payloadIdRow = D.column (D.nonNullable payloadIdDecoder)
-
-enqueueNotifyPayload :: E.Value a -> [a] -> Session [PayloadId]
-enqueueNotifyPayload theEncoder values = do
-  res <- enqueuePayload theEncoder values
-  sql "NOTIFY postgresql_simple_enqueue"
-  pure res
 
 -- TODO include special cases for single element insertion
 enqueuePayload :: E.Value a -> [a] -> Session [PayloadId]
@@ -211,14 +204,11 @@ runThrow sess conn = either (throwIO . QueryException) pure =<< run sess conn
 execute :: Connection -> ByteString -> IO ()
 execute conn theSql = runThrow (sql theSql) conn
 
-notifyName :: IsString s => s
-notifyName = fromString "postgresql_simple_enqueue"
-
 -- Block until a payload notification is fired. Fired during insertion.
-notifyPayload :: Connection -> IO ()
-notifyPayload conn = do
+notifyPayload :: ByteString -> Connection -> IO ()
+notifyPayload channel conn = fix $ \restart -> do
   Notification {..} <- either throwIO pure =<< getNotification conn
-  unless (notificationChannel == notifyName) $ notifyPayload conn
+  unless (notificationChannel == channel) restart
 
 -- | To aid in observability and white box testing
 data WithNotifyHandlers = WithNotifyHandlers
@@ -235,10 +225,10 @@ instance Semigroup WithNotifyHandlers where
 instance Monoid WithNotifyHandlers where
   mempty = WithNotifyHandlers mempty mempty
 
-withNotifyWith :: WithNotifyHandlers -> Connection -> Session a -> (a -> Maybe b) -> IO b
-withNotifyWith WithNotifyHandlers {..} conn action theCast = bracket_
-  (execute conn $ "LISTEN " <> notifyName)
-  (execute conn $ "UNLISTEN " <> notifyName)
+withNotifyWith :: WithNotifyHandlers -> ByteString -> Connection -> Session a -> (a -> Maybe b) -> IO b
+withNotifyWith WithNotifyHandlers {..} channel conn action theCast = bracket_
+  (execute conn $ "LISTEN " <> channel)
+  (execute conn $ "UNLISTEN " <> channel)
   $ fix $ \restart -> do
     x <- runThrow action conn
     withNotifyHandlersAfterAction
@@ -246,9 +236,6 @@ withNotifyWith WithNotifyHandlers {..} conn action theCast = bracket_
       Nothing -> do
         -- TODO record the time here
         withNotifyHandlersBefore
-        notifyPayload conn
+        notifyPayload channel conn
         restart
       Just xs -> pure xs
-
-withNotify :: Connection -> Session a -> (a -> Maybe b) -> IO b
-withNotify = withNotifyWith mempty

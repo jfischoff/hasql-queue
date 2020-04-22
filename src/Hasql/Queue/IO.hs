@@ -16,12 +16,13 @@ import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Control.Exception
 import           Data.Function
+import           Data.ByteString (ByteString)
 
 -------------------------------------------------------------------------------
 ---  Types
 -------------------------------------------------------------------------------
-enqueue :: Connection -> E.Value a -> [a] -> IO ()
-enqueue conn encoder xs = I.runThrow (S.enqueueNotify encoder xs) conn
+enqueue :: ByteString -> Connection -> E.Value a -> [a] -> IO ()
+enqueue channel conn encoder xs = I.runThrow (S.enqueueNotify channel encoder xs) conn
 
 {-|
 
@@ -31,7 +32,8 @@ maximum. Return `Nothing` is the `payloads` table is empty otherwise the result 
 from the payload ingesting function.
 
 -}
-withDequeue :: Connection
+withDequeue :: ByteString
+            -> Connection
             -> D.Value a
             -> Int
             -- ^ retry count
@@ -45,14 +47,15 @@ withDequeue = withDequeueWith @IOError mempty
 withDequeueWith :: forall e a b
                  . Exception e
                 => I.WithNotifyHandlers
+                -> ByteString
                 -> Connection
                 -> D.Value a
                 -> Int
                 -- ^ retry count
                 -> (a -> IO b)
                 -> IO b
-withDequeueWith withNotifyHandlers conn decoder retryCount f = (fix $ \restart i -> do
-    try (I.withNotifyWith withNotifyHandlers conn (I.withDequeue decoder retryCount f) id) >>= \case
+withDequeueWith withNotifyHandlers channel conn decoder retryCount f = (fix $ \restart i -> do
+    try (I.withNotifyWith withNotifyHandlers channel conn (I.withDequeue decoder retryCount f) id) >>= \case
       Right x -> pure x
       Left (e :: e) ->
         if i < retryCount then
