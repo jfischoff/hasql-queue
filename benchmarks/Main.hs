@@ -1,5 +1,5 @@
 module Main where
-import System.Environment
+import           System.Environment
 import           Hasql.Queue.Migrate
 import           Data.IORef
 import           Control.Exception

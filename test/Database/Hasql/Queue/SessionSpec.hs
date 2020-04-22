@@ -148,7 +148,7 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
 
     it "enqueue/withDequeue" $ \pool -> do
       (withDequeueResult, firstCount, secondCount) <- runReadCommitted pool $ do
-        enqueueNotify E.int4 [1]
+        enqueueNotify "hey" E.int4 [1]
         firstCount <- getCount
         withDequeueResult <- withDequeue D.int4 8 (`shouldBe` 1)
 
