@@ -62,8 +62,8 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
   migratedConfig <- either throwIO pure =<<
       cacheAction
         (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
-          $ BSC.pack $ migrationQueryString <> intPayloadMigration)
-        (flip withConn $ flip migrate intPayloadMigration)
+          $ BSC.pack $ migrationQueryString "int4")
+        (flip withConn $ flip migrate "int4")
         (verboseConfig <> cacheConfig dbCache)
   withConfig migratedConfig $ \db -> do
     f =<< createPool
@@ -106,7 +106,7 @@ spec :: Spec
 spec = describe "Hasql.Queue.Session" $ parallel $ do
   sequential $ aroundAll withSetup $ describe "basic" $ do
     it "is okay to migrate multiple times" $ withConnection $ \conn ->
-      liftIO $ migrate conn intPayloadMigration
+      liftIO $ migrate conn "int4"
 
     it "empty locks nothing" $ \pool -> do
       runReadCommitted pool (withDequeue D.int4 8 return) >>= \x ->
