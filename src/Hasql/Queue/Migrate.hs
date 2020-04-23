@@ -32,7 +32,17 @@ migrationQueryString = [here|
 
 intPayloadMigration :: String
 intPayloadMigration = [here|
-    ALTER TABLE payloads ADD COLUMN  IF NOT EXISTS value int4 NOT NULL;
+    ALTER TABLE payloads ADD COLUMN IF NOT EXISTS value int4 NOT NULL;
+  |]
+
+uuidPayloadMigration :: String
+uuidPayloadMigration = [here|
+    ALTER TABLE payloads ADD COLUMN IF NOT EXISTS value uuid NOT NULL;
+  |]
+
+jsonPayloadMigration :: String
+jsonPayloadMigration = [here|
+    ALTER TABLE payloads ADD COLUMN IF NOT EXISTS value json NOT NULL;
   |]
 
 {-| This function creates a table and enumeration type that is
