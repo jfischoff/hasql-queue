@@ -36,8 +36,8 @@ withSetup f = do
     --let combinedConfig = autoExplainConfig 15 <> cacheConfig dbCache
     let combinedConfig = defaultConfig <> cacheConfig dbCache
     migratedConfig <- throwE $ cacheAction (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
-        $ BSC.pack $ migrationQueryString <> intPayloadMigration)
-        (flip withConn $ flip migrate intPayloadMigration)
+        $ BSC.pack $ migrationQueryString "int4")
+        (flip withConn $ flip migrate "int4")
         combinedConfig
     withConfig migratedConfig $ \db -> do
       print $ toConnectionString db
