@@ -18,10 +18,19 @@ import           Control.Exception
 import           Data.Function
 import           Data.ByteString (ByteString)
 
--------------------------------------------------------------------------------
----  Types
--------------------------------------------------------------------------------
-enqueue :: ByteString -> Connection -> E.Value a -> [a] -> IO ()
+{-|
+
+
+-}
+enqueue :: ByteString
+        -- ^ Notification channel name. Any valid PostgreSQL identifier
+        -> Connection
+        -- ^ Connection
+        -> E.Value a
+        -- ^ Payload encoder
+        -> [a]
+        -- ^ List of payloads to enqueue
+        -> IO ()
 enqueue channel conn encoder xs = I.runThrow (S.enqueueNotify channel encoder xs) conn
 
 {-|
