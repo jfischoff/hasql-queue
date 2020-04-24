@@ -109,7 +109,7 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
       liftIO $ migrate conn "int4"
 
     it "empty locks nothing" $ \pool -> do
-      runReadCommitted pool (withDequeue D.int4 8 return) >>= \x ->
+      runReadCommitted pool (withDequeue D.int4 8 1 return) >>= \x ->
         x `shouldBe` Nothing
     it "empty gives count 0" $ \pool ->
       runReadCommitted pool getCount `shouldReturn` 0
@@ -134,7 +134,7 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
 
       replicateM_ 8 $ E.handle (\(_ :: TooManyRetries) -> pure ()) $
         runImplicitTransaction pool $ do
-          void $ withDequeue D.int4 1 $ const $
+          void $ withDequeue D.int4 1 1 $ const $
             throwM $ TooManyRetries 1
 
       (a, b) <- runImplicitTransaction pool $ do
@@ -150,7 +150,7 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
       (withDequeueResult, firstCount, secondCount) <- runReadCommitted pool $ do
         enqueueNotify "hey" E.int4 [1]
         firstCount <- getCount
-        withDequeueResult <- withDequeue D.int4 8 (`shouldBe` 1)
+        withDequeueResult <- withDequeue D.int4 8 1 (`shouldBe` [1])
 
         secondCount <- getCount
         pure (withDequeueResult, firstCount, secondCount)
@@ -165,7 +165,7 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
       e <- E.try $ runImplicitTransaction pool $ do
         theCount <- getCount
 
-        void $ withDequeue D.int4 8 $ const $
+        void $ withDequeue D.int4 8 1 $ const $
             throwM $ TooManyRetries theCount
 
       (e :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
@@ -179,13 +179,13 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
       e1 <- E.try $ runImplicitTransaction pool $ do
         theCount <- getCount
 
-        void $ withDequeue D.int4 8 $ const $
+        void $ withDequeue D.int4 8 1 $ const $
             throwM $ TooManyRetries theCount
 
       (e1 :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
 
       replicateM_ 6 $ E.handle (\(_ :: TooManyRetries) -> pure ()) $ runImplicitTransaction pool $ do
-          void $ withDequeue D.int4 8 $ const $
+          void $ withDequeue D.int4 8 1 $ const $
             throwM $ TooManyRetries 1
 
       runImplicitTransaction pool (dequeuePayload D.int4 1) >>= \[(Payload {..})] -> do
@@ -197,7 +197,7 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
         enqueue E.int4 [1]
         firstCount <- getCount
 
-        void $ withDequeue D.int4 0 $ const $
+        void $ withDequeue D.int4 0 1 $ const $
             throwM $ TooManyRetries firstCount
 
       (e :: Either TooManyRetries ())`shouldBe` Left (TooManyRetries 1)
@@ -213,8 +213,8 @@ spec = describe "Hasql.Queue.Session" $ parallel $ do
 
         firstCount <- getCount
 
-        firstwithDequeueResult   <- withDequeue D.int4 8 (`shouldBe` 1)
-        secondwithDequeueResult <- withDequeue D.int4 8 (`shouldBe` 2)
+        firstwithDequeueResult   <- withDequeue D.int4 8 1 (`shouldBe` [1])
+        secondwithDequeueResult <- withDequeue D.int4 8 1 (`shouldBe` [2])
 
         secondCount <- getCount
         pure (firstCount, firstwithDequeueResult, secondwithDequeueResult, secondCount)

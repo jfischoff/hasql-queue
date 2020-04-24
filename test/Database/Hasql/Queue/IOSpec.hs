@@ -121,8 +121,8 @@ spec = describe "Hasql.Queue.IO" $ do
   aroundAll withSetup $ describe "basic" $ do
     it "withDequeue blocks until something is enqueued: before" $ withConnection $ \conn -> do
       void $ enqueue channel conn E.int4 [1]
-      res <- withDequeueWith @IOException mempty channel conn D.int4 1 pure
-      res `shouldBe` 1
+      res <- withDequeueWith @IOException mempty channel conn D.int4 1 1 pure
+      res `shouldBe` [1]
       getCount conn `shouldReturn` 0
 
     it "withDequeue blocks until something is enqueued: during" $ withConnection $ \conn -> do
@@ -135,24 +135,24 @@ spec = describe "Hasql.Queue.IO" $ do
             }
 
       -- This is the definition of IO.dequeue
-      resultThread <- async $ withDequeueWith @IOException handlers channel conn D.int4 1 pure
+      resultThread <- async $ withDequeueWith @IOException handlers channel conn D.int4 1 1 pure
       takeMVar afterActionMVar
 
       void $ enqueue "hey" conn E.int4 [1]
 
       putMVar beforeNotifyMVar ()
 
-      wait resultThread `shouldReturn` 1
+      wait resultThread `shouldReturn` [1]
 
     it "withDequeue blocks until something is enqueued: after" $ withConnection $ \conn -> do
-      resultThread <- async $ withDequeueWith @IOException mempty channel conn D.int4 1 pure
+      resultThread <- async $ withDequeueWith @IOException mempty channel conn D.int4 1 1 pure
       void $ enqueue channel conn E.int4 [1]
 
-      wait resultThread `shouldReturn` 1
+      wait resultThread `shouldReturn` [1]
 
     it "withDequeue fails and sets the retries to +1" $ withConnection $ \conn -> do
       [payloadId] <- runThrow (I.enqueuePayload E.int4 [1]) conn
-      handle (\FailedwithDequeue -> pure ()) $ withDequeue channel conn D.int4 0 $ \_ -> throwIO FailedwithDequeue
+      handle (\FailedwithDequeue -> pure ()) $ withDequeue channel conn D.int4 0 1 $ \_ -> throwIO FailedwithDequeue
       Just Payload {..} <- getPayload conn D.int4 payloadId
 
       pState `shouldBe` I.Failed
@@ -163,7 +163,7 @@ spec = describe "Hasql.Queue.IO" $ do
 
       ref <- newIORef (0 :: Int)
 
-      withDequeueWith @FailedwithDequeue mempty channel conn D.int4 1 (\_ -> do
+      withDequeueWith @FailedwithDequeue mempty channel conn D.int4 1 1 (\_ -> do
         count <- readIORef ref
         writeIORef ref $ count + 1
         when (count < 1) $ throwIO FailedwithDequeue
@@ -183,7 +183,7 @@ spec = describe "Hasql.Queue.IO" $ do
       ref <- newTVarIO []
 
       loopThreads <- replicateM 35 $ async $ withPool' $ \c -> fix $ \next -> do
-        lastCount <- withDequeue channel c D.int4 1 $ \x -> do
+        lastCount <- withDequeue channel c D.int4 1 1 $ \[x] -> do
           atomically $ do
             xs <- readTVar ref
             writeTVar ref $ x : xs

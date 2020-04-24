@@ -18,10 +18,17 @@ import           Control.Exception
 import           Data.Function
 import           Data.ByteString (ByteString)
 
--------------------------------------------------------------------------------
----  Types
--------------------------------------------------------------------------------
-enqueue :: ByteString -> Connection -> E.Value a -> [a] -> IO ()
+{-|Enqueue a payload into the queue.
+-}
+enqueue :: ByteString
+        -- ^ Notification channel name. Any valid PostgreSQL identifier
+        -> Connection
+        -- ^ Connection
+        -> E.Value a
+        -- ^ Payload encoder
+        -> [a]
+        -- ^ List of payloads to enqueue
+        -> IO ()
 enqueue channel conn encoder xs = I.runThrow (S.enqueueNotify channel encoder xs) conn
 
 {-|
@@ -36,8 +43,10 @@ withDequeue :: ByteString
             -> Connection
             -> D.Value a
             -> Int
-            -- ^ retry count
-            -> (a -> IO b)
+            -- ^ Retry count
+            -> Int
+            -- ^ Element count
+            -> ([a] -> IO b)
             -> IO b
 withDequeue = withDequeueWith @IOError mempty
 
@@ -51,11 +60,13 @@ withDequeueWith :: forall e a b
                 -> Connection
                 -> D.Value a
                 -> Int
-                -- ^ retry count
-                -> (a -> IO b)
+                -- ^ Retry count
+                -> Int
+                -- ^ Element count
+                -> ([a] -> IO b)
                 -> IO b
-withDequeueWith withNotifyHandlers channel conn decoder retryCount f = (fix $ \restart i -> do
-    try (I.withNotifyWith withNotifyHandlers channel conn (I.withDequeue decoder retryCount f) id) >>= \case
+withDequeueWith withNotifyHandlers channel conn decoder retryCount count f = (fix $ \restart i -> do
+    try (I.withNotifyWith withNotifyHandlers channel conn (I.withDequeue decoder retryCount count f) id) >>= \case
       Right x -> pure x
       Left (e :: e) ->
         if i < retryCount then
