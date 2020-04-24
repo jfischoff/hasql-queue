@@ -13,7 +13,6 @@ import           Hasql.Statement
 import           Data.ByteString (ByteString)
 import           Control.Exception
 import           Control.Monad.IO.Class
-import           Control.Monad (when)
 import           Data.Typeable
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
@@ -159,38 +158,38 @@ getCount = do
       theStatement = Statement theSql mempty decoder True
   statement () theStatement
 
-setEnqueueWithCount :: PayloadId -> Int -> Session ()
-setEnqueueWithCount thePid retries = do
-  let encoder = (fst >$< E.param (E.nonNullable payloadIdEncoder)) <>
-                (snd >$< E.param (E.nonNullable E.int4))
-  statement (thePid, fromIntegral retries) $ state encoder D.noResult [here|
-    UPDATE payloads SET state='enqueued', modified_at=nextval('modified_index'), attempts=$2 WHERE id = $1
-  |]
+incrementAttempts :: Int -> [PayloadId] -> Session ()
+incrementAttempts retryCount pids = do
+  let theQuery = [here|
+        UPDATE payloads
+        SET state=CASE WHEN attempts >= $1 THEN 'failed' :: state_t ELSE 'enqueued' END
+          , attempts=attempts+1
+        WHERE id = ANY($2)
+        |]
+      encoder = (fst >$< E.param (E.nonNullable E.int4)) <>
+                (snd >$< E.param (E.nonNullable $ E.foldableArray $ E.nonNullable payloadIdEncoder))
 
-setFailed :: PayloadId -> Session ()
-setFailed thePid = do
-  let encoder = E.param (E.nonNullable payloadIdEncoder)
-  statement thePid $ state encoder D.noResult [here|
-    UPDATE payloads SET state='failed' WHERE id = $1
-  |]
+      theStatement = Statement theQuery encoder D.noResult True
+
+  statement (fromIntegral retryCount, pids) theStatement
+
 -- | Dequeue and
 --   Move to Internal
 -- This should use bracketOnError
-withDequeue :: D.Value a -> Int -> (a -> IO b) -> Session (Maybe b)
-withDequeue decoder retryCount f = do
+withDequeue :: D.Value a -> Int -> Int -> ([a] -> IO b) -> Session (Maybe b)
+withDequeue decoder retryCount count f = do
   sql "BEGIN;SAVEPOINT temp"
-  dequeuePayload decoder 1 >>= \case
+  dequeuePayload decoder count >>= \case
     [] ->  Nothing <$ sql "COMMIT"
-    [Payload {..}] -> fmap Just $ do
-      liftIO (try $ f pValue) >>= \case
+    xs -> fmap Just $ do
+      liftIO (try $ f $ fmap pValue xs) >>= \case
         Left  (e :: SomeException) -> do
            sql "ROLLBACK TO SAVEPOINT temp; RELEASE SAVEPOINT temp"
-           setEnqueueWithCount pId (pAttempts + 1)
-           when (pAttempts >= retryCount) $ setFailed pId
+           let pids = fmap pId xs
+           incrementAttempts retryCount pids
            sql "COMMIT"
            liftIO (throwIO e)
         Right x ->  x <$ sql "COMMIT"
-    _ -> pure Nothing
 
 -- TODO remove
 newtype QueryException = QueryException QueryError
