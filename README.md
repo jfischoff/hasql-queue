@@ -15,6 +15,8 @@ createAccount userRecord = transaction Serializable Write $ do
 In another thread or process the consumer would drain the queue.
 
 ```haskell
+  -- Wait for a single new record and try to send the email 5 times for giving
+  -- up and marking the payload as failed.
   forever $ withDequeue "queue_channel" conn emailDecoder 5 1 $
     mapM_ sendEmail
 ```
