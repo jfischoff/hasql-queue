@@ -22,7 +22,11 @@ import           Data.ByteString (ByteString)
 
 {-|Enqueue a payload.
 -}
-enqueue :: E.Value a -> [a] -> Session ()
+enqueue :: E.Value a
+        -- ^ Payload encoder
+        -> [a]
+        -- ^ List of payloads to enqueue
+        -> Session ()
 enqueue theEncoder = \case
   [x] -> do
     let theQuery =
@@ -49,12 +53,25 @@ enqueue theEncoder = \case
 {-|Enqueue a payload send a notification on the
 specified channel.
 -}
-enqueueNotify :: ByteString -> E.Value a -> [a] -> Session ()
+enqueueNotify :: ByteString
+              -- ^ Notification channel name. Any valid PostgreSQL identifier
+              -> E.Value a
+              -- ^ Payload encoder
+              -> [a]
+              -- ^ List of payloads to enqueue
+              -> Session ()
 enqueueNotify channel theEncoder values = do
   enqueue theEncoder values
   sql $ "NOTIFY " <> channel
 
-dequeue :: D.Value a -> Int -> Session [a]
+{-|
+Dequeue a list of payloads
+-}
+dequeue :: D.Value a
+        -- ^ Payload decoder
+        -> Int
+        -- ^ Element count
+        -> Session [a]
 dequeue valueDecoder count = do
   let multipleQuery = [here|
         UPDATE payloads
@@ -130,8 +147,34 @@ listState theState valueDecoder mPayloadId count = do
     [] -> (defaultPayloadId, [])
     xs -> (fst $ last xs, map snd xs)
 
-failed :: D.Value a -> Maybe PayloadId -> Int -> Session (PayloadId, [a])
+{-|
+Retrieve the payloads that have entered a failed state. See 'withDequeue' for how that
+occurs. The function returns a list of values and an id. The id is used the starting
+place for the next batch of values. If 'Nothing' is passed the list starts at the
+beginning.
+-}
+failed :: D.Value a
+       -- ^ Payload decoder
+       -> Maybe PayloadId
+       -- ^ Starting position of payloads. Pass 'Nothing' to
+       --   start at the beginning
+       -> Int
+       -- ^ Count
+       -> Session (PayloadId, [a])
 failed = listState Failed
 
-dequeued :: D.Value a -> Maybe PayloadId -> Int -> Session (PayloadId, [a])
+{-|
+Retrieve the payloads that have been successfully dequeued.
+The function returns a list of values and an id. The id is used the starting
+place for the next batch of values. If 'Nothing' is passed the list starts at the
+beginning.
+-}
+dequeued :: D.Value a
+         -- ^ Payload decoder
+         -> Maybe PayloadId
+         -- ^ Starting position of payloads. Pass 'Nothing' to
+         --   start at the beginning
+         -> Int
+         -- ^ Count
+         -> Session (PayloadId, [a])
 dequeued = listState Dequeued

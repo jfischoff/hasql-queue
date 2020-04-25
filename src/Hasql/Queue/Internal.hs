@@ -45,6 +45,10 @@ stateEncoder = E.enum $ \case
 initialPayloadId :: PayloadId
 initialPayloadId = PayloadId (-1)
 
+{-|
+Internal payload id. Used by the public api as continuation token
+for pagination.
+-}
 newtype PayloadId = PayloadId { unPayloadId :: Int64 }
   deriving (Eq, Show)
 

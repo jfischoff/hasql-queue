@@ -68,7 +68,15 @@ occurs. The function returns a list of values and an id. The id is used the star
 place for the next batch of values. If 'Nothing' is passed the list starts at the
 beginning.
 -}
-failed :: Connection -> D.Value a -> Maybe I.PayloadId -> Int -> IO (I.PayloadId, [a])
+failed :: Connection
+       -> D.Value a
+       -- ^ Payload decoder
+       -> Maybe I.PayloadId
+       -- ^ Starting position of payloads. Pass 'Nothing' to
+       --   start at the beginning
+       -> Int
+       -- ^ Count
+       -> IO (I.PayloadId, [a])
 failed conn decoder mPayload count = I.runThrow (S.failed decoder mPayload count) conn
 
 {-|
@@ -77,7 +85,15 @@ The function returns a list of values and an id. The id is used the starting
 place for the next batch of values. If 'Nothing' is passed the list starts at the
 beginning.
 -}
-dequeued :: Connection -> D.Value a -> Maybe I.PayloadId -> Int -> IO (I.PayloadId, [a])
+dequeued :: Connection
+         -> D.Value a
+         -- ^ Payload decoder
+         -> Maybe I.PayloadId
+         -- ^ Starting position of payloads. Pass 'Nothing' to
+         --   start at the beginning
+         -> Int
+         -- ^ Count
+         -> IO (I.PayloadId, [a])
 dequeued conn decoder mPayload count = I.runThrow (S.dequeued decoder mPayload count) conn
 
 {-|
