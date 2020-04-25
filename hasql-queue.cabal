@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e91c374c2ee30724ee0f937315490109721651043423c6eb397e1a7c6c042a46
+-- hash: fbcc044a19b8d3b99ee8a53232335cd0b2c22b20d34c76dac4dd894d0441eb47
 
 name:           hasql-queue
 version:        1.0.1
@@ -47,6 +47,7 @@ tested-with:    GHC ==8.8.1
 build-type:     Simple
 extra-source-files:
     README.md
+    CHANGELOG.md
 
 source-repository head
   type: git

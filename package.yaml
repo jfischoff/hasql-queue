@@ -62,7 +62,9 @@ ghc-options:
 - -Wall
 - -Wno-unused-do-bind
 - -Wno-unused-foralls
-extra-source-files:  README.md, CHANGELOG.md
+extra-source-files:
+ - README.md
+ - CHANGELOG.md
 
 
 tested-with: GHC ==8.8.1
