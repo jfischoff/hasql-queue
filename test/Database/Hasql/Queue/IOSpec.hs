@@ -131,7 +131,7 @@ spec = describe "Hasql.Queue.IO" $ do
 
       let handlers = WithNotifyHandlers
             { withNotifyHandlersAfterAction = putMVar afterActionMVar ()
-            , withNotifyHandlersBefore      = takeMVar beforeNotifyMVar
+            , withNotifyHandlersBeforeNotification      = takeMVar beforeNotifyMVar
             }
 
       -- This is the definition of IO.dequeue

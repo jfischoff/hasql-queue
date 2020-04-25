@@ -215,14 +215,18 @@ notifyPayload channel conn = fix $ \restart -> do
 
 -- | To aid in observability and white box testing
 data WithNotifyHandlers = WithNotifyHandlers
-  { withNotifyHandlersAfterAction :: IO ()
-  , withNotifyHandlersBefore      :: IO ()
+  { withNotifyHandlersAfterAction        :: IO ()
+  -- ^ An event that is trigger after the initial action, e.g.
+  --   before dequeue is called.
+  , withNotifyHandlersBeforeNotification :: IO ()
+  -- ^ An event that is triggered before the blocking on a
+  --   notification.
   }
 
 instance Semigroup WithNotifyHandlers where
   x <> y = WithNotifyHandlers
     { withNotifyHandlersAfterAction = withNotifyHandlersAfterAction x <> withNotifyHandlersAfterAction y
-    , withNotifyHandlersBefore      = withNotifyHandlersBefore      x <> withNotifyHandlersBefore      y
+    , withNotifyHandlersBeforeNotification = withNotifyHandlersBeforeNotification      x <> withNotifyHandlersBeforeNotification      y
     }
 
 instance Monoid WithNotifyHandlers where
@@ -238,7 +242,7 @@ withNotifyWith WithNotifyHandlers {..} channel conn action theCast = bracket_
     case theCast x of
       Nothing -> do
         -- TODO record the time here
-        withNotifyHandlersBefore
+        withNotifyHandlersBeforeNotification
         notifyPayload channel conn
         restart
       Just xs -> pure xs
