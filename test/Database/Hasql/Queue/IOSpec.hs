@@ -62,7 +62,7 @@ withConn db f = do
   E.bracket (either (throwIO . userError . show) pure =<< acquire connStr) release f
 
 runThrow :: Session a -> Connection -> IO a
-runThrow sess conn = either (throwIO . QueryException) pure =<< run sess conn
+runThrow sess conn = either (throwIO . I.QueryException) pure =<< run sess conn
 
 getCount :: Connection -> IO Int64
 getCount = runThrow I.getCount
