@@ -1,11 +1,14 @@
+{-|
+'Session' based API for a PostgreSQL backed queue.
+-}
 module Hasql.Queue.Session
   ( enqueue
   , enqueueNotify
   , dequeue
+  -- ** Listing API
+  , PayloadId
   , failed
   , dequeued
-  , getCount
-  , PayloadId
   ) where
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
@@ -17,6 +20,8 @@ import           Hasql.Queue.Internal
 import           Data.Maybe
 import           Data.ByteString (ByteString)
 
+{-|Enqueue a payload.
+-}
 enqueue :: E.Value a -> [a] -> Session ()
 enqueue theEncoder = \case
   [x] -> do
@@ -41,6 +46,9 @@ enqueue theEncoder = \case
 
     statement xs $ Statement theQuery encoder D.noResult True
 
+{-|Enqueue a payload send a notification on the
+specified channel.
+-}
 enqueueNotify :: ByteString -> E.Value a -> [a] -> Session ()
 enqueueNotify channel theEncoder values = do
   enqueue theEncoder values
