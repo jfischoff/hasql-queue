@@ -107,11 +107,6 @@ install:
   - touch cabal.project
   - |
     echo "packages: ." >> cabal.project
-  - |
-    echo "source-repository-package"                                    >> cabal.project
-    echo "  type:     git"                                              >> cabal.project
-    echo "  location: https://github.com/jfischoff/hasql-notifications" >> cabal.project
-    echo "  tag:      ca0eeb8851a3721eaecc9b683e522726a0b86ac6"         >> cabal.project
   - "for pkg in $($HCPKG list --simple-output); do echo $pkg | sed 's/-[^-]*$//' | (grep -vE -- '^(hasql-queue)$' || true) | sed 's/^/constraints: /' | sed 's/$/ installed/' >> cabal.project.local; done"
   - cat cabal.project || true
   - cat cabal.project.local || true
