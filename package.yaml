@@ -7,7 +7,7 @@ author: Jonathan Fischoff
 maintainer: jonathangfischoff@gmail.com
 copyright: 2020 Jonathan Fischoff
 license: BSD3
-github: jfischoff/postgresql-queue
+github: jfischoff/hasql-queue
 extra-source-files:
 - README.md
 ghc-options:
