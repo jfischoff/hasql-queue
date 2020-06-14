@@ -8,8 +8,6 @@ maintainer: jonathangfischoff@gmail.com
 copyright: 2020 Jonathan Fischoff
 license: BSD3
 github: jfischoff/hasql-queue
-extra-source-files:
-- README.md
 ghc-options:
 - -Wall
 - -Wno-unused-do-bind
