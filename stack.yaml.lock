@@ -5,19 +5,12 @@
 
 packages:
 - completed:
-    size: 8481
-    url: https://github.com/jfischoff/hasql-notifications/archive/eea922d247e3fcd90a7b2554710a0bd41de1744d.tar.gz
-    cabal-file:
-      size: 1580
-      sha256: 6f7ae5e18eaf61393a402d4de8c02819bc17e3d4c1587f7e00742cead227cd4b
-    name: hasql-notifications
-    version: 0.1.0.0
-    sha256: 80d376f1a147ce65a74cf0a8ee23adb102867e2d7b3d5a4102385c594cfd9e49
+    hackage: postgresql-libpq-notify-0.2.0.0@sha256:bbc4340400dcd788eaea238b5e7a64abe6046f84b1ba0a333384512cf081ec8c,1365
     pantry-tree:
-      size: 659
-      sha256: cddd6af9aafc77046d21afb94e1d7bd9acc0fc9a4b4787cc7a424b1a7a24a53c
+      size: 354
+      sha256: c3dc643ca689ec267e00d629ad527cda61a14b34dcf2490a08a9b5e250a8c95a
   original:
-    url: https://github.com/jfischoff/hasql-notifications/archive/eea922d247e3fcd90a7b2554710a0bd41de1744d.tar.gz
+    hackage: postgresql-libpq-notify-0.2.0.0
 snapshots:
 - completed:
     size: 458669

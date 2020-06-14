@@ -4,37 +4,12 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: fbcc044a19b8d3b99ee8a53232335cd0b2c22b20d34c76dac4dd894d0441eb47
+-- hash: 0942440e039f8a362d40aaea15d5129156246928f0ba3191d6c7e1d3c13a9092
 
 name:           hasql-queue
-version:        1.0.1
+version:        1.0.0.0
 synopsis:       A PostgreSQL backed queue
-description:    This module utilize PostgreSQL to implement a durable queue for efficently processing arbitrary payloads which can be represented as JSON.
-                .
-                Typically a producer would enqueue a new payload as part of larger database
-                transaction
-                .
-                >  createAccount userRecord = do
-                >     'runDBTSerializable' $ do
-                >        createUserDB userRecord
-                >        'enqueueDB' "queue_schema" $ makeVerificationEmail userRecord
-                .
-                In another thread or process, the consumer would drain the queue.
-                .
-                >   forever $ do
-                >     -- Attempt get a payload or block until one is available
-                >     payload <- lock "queue" conn
-                >
-                >     -- Perform application specifc parsing of the payload value
-                >     case fromJSON $ pValue payload of
-                >       Success x -> sendEmail x -- Perform application specific processing
-                >       Error err -> logErr err
-                >
-                >     -- Remove the payload from future processing
-                >     dequeue "queue" conn $ pId payload
-                >
-                > To support multiple queues in the same database, the API expects a table name string
-                > to determine which queue tables to use.
+description:    A PostgreSQL backed queue. Please see README.md
 category:       Web
 homepage:       https://github.com/jfischoff/postgresql-queue#readme
 bug-reports:    https://github.com/jfischoff/postgresql-queue/issues
@@ -71,9 +46,10 @@ library
     , bytestring
     , exceptions
     , hasql
-    , hasql-notifications
     , here
     , monad-control
+    , postgresql-libpq
+    , postgresql-libpq-notify >=0.2.0.0
     , random
     , stm
     , text
@@ -98,10 +74,11 @@ executable benchmark
     , cryptohash-sha1
     , exceptions
     , hasql
-    , hasql-notifications
     , hasql-queue
     , here
     , monad-control
+    , postgresql-libpq
+    , postgresql-libpq-notify >=0.2.0.0
     , random
     , resource-pool
     , stm
@@ -131,13 +108,14 @@ test-suite unit-tests
     , cryptohash-sha1
     , exceptions
     , hasql
-    , hasql-notifications
     , hasql-queue
     , here
     , hspec
     , hspec-core
     , hspec-expectations-lifted
     , monad-control
+    , postgresql-libpq
+    , postgresql-libpq-notify >=0.2.0.0
     , random
     , resource-pool
     , split
