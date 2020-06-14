@@ -1,3 +1,6 @@
+# 6/13/20
+- I guess I am ready to release it now
+
 # 2/2/20
 - Not sure why stack is not working
 
