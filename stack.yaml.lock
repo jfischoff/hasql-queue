@@ -13,7 +13,7 @@ packages:
     hackage: postgresql-libpq-notify-0.2.0.0
 snapshots:
 - completed:
-    size: 458669
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2020/1/21.yaml
-    sha256: 3162cd7b6d9a0f8f033a1a2eebb5e5c7f353514a790938cb71690cf8c0a87a28
-  original: nightly-2020-01-21
+    size: 531237
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/16/0.yaml
+    sha256: 210e15b7043e2783115afe16b0d54914b1611cdaa73f3ca3ca7f8e0847ff54e5
+  original: lts-16.0

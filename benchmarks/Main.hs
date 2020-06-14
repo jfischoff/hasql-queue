@@ -17,6 +17,7 @@ import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Hasql.Statement
 import qualified Hasql.Queue.Internal as I
+import qualified Hasql.Queue.IO as IO
 import qualified Hasql.Queue.Session as S
 import           Data.Int
 
@@ -51,7 +52,8 @@ payload = 1
 
 main :: IO ()
 main = do
-  [producerCount, consumerCount, time, initialDequeueCount, initialEnqueueCount, batchCount] <- map read <$> getArgs
+  [producerCount, consumerCount, time, initialDequeueCount, initialEnqueueCount, batchCount, notify]
+    <- map read <$> getArgs
   -- create a temporary database
   enqueueCounter <- newIORef (0 :: Int)
   dequeueCounter <- newIORef (0 :: Int)
@@ -65,11 +67,17 @@ main = do
 
   flip finally printCounters $ withSetup $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
-    let enqueueAction = void $ withResource pool $ \conn -> I.runThrow (S.enqueue E.int4 [payload]) conn
-        dequeueAction = void $ withResource pool $ \conn -> fix $ \next ->
-          I.runThrow (S.dequeue D.int4 batchCount) conn >>= \case
+    let enqueueAction = if notify > 0
+          then void $ withResource pool $ \conn -> IO.enqueue "channel" conn E.int4 [payload]
+          else void $ withResource pool $ \conn -> I.runThrow (S.enqueue E.int4 [payload]) conn
+        dequeueAction = if notify > 0
+          then void $ withResource pool $ \conn ->
+            IO.withDequeue "channel" conn D.int4 1 batchCount (const $ pure ())
+          else void $ withResource pool $ \conn -> fix $ \next ->
+            I.runThrow (S.dequeue D.int4 batchCount) conn >>= \case
               [] -> next
               _ -> pure ()
+
 
     let enqueueInsertSql = "INSERT INTO payloads (attempts, value) SELECT 0, g.value FROM generate_series(1, $1) AS g (value)"
         enqueueInsertStatement =
