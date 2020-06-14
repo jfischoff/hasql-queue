@@ -75,13 +75,13 @@ main = do
         enqueueInsertStatement =
           statement (fromIntegral initialEnqueueCount) $ Statement enqueueInsertSql (E.param $ E.nonNullable E.int4) D.noResult False
 
-    withResource pool $ run enqueueInsertStatement
+    _ <- withResource pool $ run enqueueInsertStatement
 
     let dequeueInsertSql = "INSERT INTO payloads (attempts, state, value) SELECT 0, 'dequeued', g.value FROM generate_series(1, $1) AS g (value)"
         dequeueInsertStatement =
           statement (fromIntegral initialDequeueCount) $ Statement dequeueInsertSql (E.param $ E.nonNullable E.int4) D.noResult False
 
-    withResource pool $ run dequeueInsertStatement
+    _ <- withResource pool $ run dequeueInsertStatement
 
     withResource pool $ \conn -> void $ run (sql "VACUUM FULL ANALYZE") conn
     putStrLn "Finished VACUUM FULL ANALYZE"
