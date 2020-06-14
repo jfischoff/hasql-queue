@@ -1,5 +1,5 @@
 name: hasql-queue
-version: '1.0.0.0'
+version: '1.0.0.1'
 synopsis: A PostgreSQL backed queue
 description: A PostgreSQL backed queue. Please see README.md
 category: Web
