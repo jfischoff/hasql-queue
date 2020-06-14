@@ -2,7 +2,7 @@ module Hasql.Queue.Internal where
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Hasql.Session
-import           Hasql.Notification
+import           Database.PostgreSQL.LibPQ.Notify
 import           Control.Monad (unless)
 import           Data.Function(fix)
 import           Hasql.Connection
@@ -14,6 +14,7 @@ import           Data.ByteString (ByteString)
 import           Control.Exception
 import           Control.Monad.IO.Class
 import           Data.Typeable
+import qualified Database.PostgreSQL.LibPQ as PQ
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -210,8 +211,8 @@ execute conn theSql = runThrow (sql theSql) conn
 -- Block until a payload notification is fired. Fired during insertion.
 notifyPayload :: ByteString -> Connection -> IO ()
 notifyPayload channel conn = fix $ \restart -> do
-  Notification {..} <- either throwIO pure =<< getNotification conn
-  unless (notificationChannel == channel) restart
+  PQ.Notify {..} <- either throwIO pure =<< withLibPQConnection conn getNotification
+  unless (notifyRelname == channel) restart
 
 -- | To aid in observability and white box testing
 data WithNotifyHandlers = WithNotifyHandlers
