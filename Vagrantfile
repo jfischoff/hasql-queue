@@ -12,9 +12,7 @@ Vagrant.configure("2") do |config|
 
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://vagrantcloud.com/search.
-  config.vm.box = "debian/buster64"
-
-  config.disksize.size = '50GB'
+  config.vm.box = "bento/ubuntu-20.04"
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
@@ -65,8 +63,20 @@ Vagrant.configure("2") do |config|
   # Enable provisioning with a shell script. Additional provisioners such as
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
-  # config.vm.provision "shell", inline: <<-SHELL
-  #   apt-get update
-  #   apt-get install -y apache2
-  # SHELL
+  config.vm.provision "shell", inline: <<-SHELL
+    sudo apt update
+    sudo apt install -y linux-tools-common linux-tools-generic linux-tools-5.4.0-29-generic
+
+    sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+    sudo apt-get update
+    sudo apt-get install -y postgresql-12 libpq-dev postgresql-client-12
+
+    curl -sSL https://get.haskellstack.org/ | sh
+
+    echo "export PATH=$PATH:/usr/lib/postgresql/12/bin/" >> /home/ubuntu/.bashrc
+
+    sudo sysctl -w kernel.perf_event_paranoid=-1
+
+  SHELL
 end
