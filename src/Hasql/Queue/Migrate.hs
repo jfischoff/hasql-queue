@@ -9,11 +9,12 @@ system.
 {-# OPTIONS_HADDOCK prune #-}
 {-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
 module Hasql.Queue.Migrate where
-import           Control.Monad
 import           Data.String
 import           Data.String.Here.Interpolated
 import           Hasql.Connection
 import           Hasql.Session
+import           Hasql.Queue.Session
+import           Hasql.Queue.Internal
 
 
 {-|
@@ -24,6 +25,17 @@ migrationQueryString :: String
                      -- @jsonb@.
                      -> String
 migrationQueryString valueType = [i|
+  CREATE OR REPLACE FUNCTION create_partition_table (startValue int8, endValue int8) RETURNS void AS $$
+    DECLARE
+      partition_name text;
+    BEGIN
+      partition_name := 'payloads_' || startValue || '_' || endValue ;
+      EXECUTE
+        format(E'CREATE TABLE %I partition of payloads for values from (%L) to (%L);',
+          partition_name, startValue, endValue);
+    END;
+  $$ LANGUAGE plpgsql;
+
     DO $$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'state_t') THEN
@@ -34,12 +46,13 @@ migrationQueryString valueType = [i|
   CREATE SEQUENCE IF NOT EXISTS modified_index START 1;
 
   CREATE TABLE IF NOT EXISTS payloads
-  ( id BIGSERIAL PRIMARY KEY
+  ( id BIGSERIAL NOT NULL
   , attempts int NOT NULL DEFAULT 0
   , state state_t NOT NULL DEFAULT 'enqueued'
   , modified_at int8 NOT NULL DEFAULT nextval('modified_index')
   , value ${valueType} NOT NULL
-  ) WITH (fillfactor = 50);
+  , PRIMARY KEY(id, modified_at)
+  ) PARTITION BY RANGE (modified_at);
 
   CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at)
     WHERE (state = 'enqueued');
@@ -77,5 +90,6 @@ migrate :: Connection
         -> String
         -- ^ The type of the @value@ column
         -> IO ()
-migrate conn valueType = void $
-  run (sql $ fromString $ migrationQueryString valueType) conn
+migrate conn valueType = do
+  runThrow (sql $ fromString $ migrationQueryString valueType) conn
+  runThrow (createPartitions 5 100000) conn

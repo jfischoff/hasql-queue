@@ -9,6 +9,7 @@ module Hasql.Queue.Session
   , PayloadId
   , failed
   , dequeued
+  , createPartitions
   ) where
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
@@ -19,6 +20,9 @@ import           Hasql.Statement
 import           Hasql.Queue.Internal
 import           Data.Maybe
 import           Data.ByteString (ByteString)
+import qualified Data.Text as T
+import           Control.Monad
+import           Data.List
 
 {-|Enqueue a payload.
 -}
@@ -178,3 +182,50 @@ dequeued :: D.Value a
          -- ^ Count
          -> Session (PayloadId, [a])
 dequeued = listState Dequeued
+
+createPartitionTable :: Int -> Int -> Session ()
+createPartitionTable start end = do
+  let theQuery = [here|
+          SELECT create_partition_table($1, $2)
+        |]
+
+      encoder = (fst >$< E.param (E.nonNullable E.int4))
+             <> (snd >$< E.param (E.nonNullable E.int4))
+
+      theStatement = Statement theQuery encoder D.noResult True
+
+  statement (fromIntegral start, fromIntegral end) theStatement
+
+createPartitions :: Int -> Int -> Session ()
+createPartitions partitionCount rangeLength = do
+  let theQuery = [here|
+        SELECT pg_catalog.pg_get_expr(c.relpartbound, c.oid)
+        FROM pg_catalog.pg_class p
+           , pg_catalog.pg_class c
+           , pg_catalog.pg_inherits i
+        WHERE c.oid=i.inhrelid AND i.inhparent = p.oid AND p.relname='payloads'
+        ORDER BY pg_catalog.pg_get_expr(c.relpartbound, c.oid) = 'DEFAULT'
+            , c.oid::pg_catalog.regclass::pg_catalog.text;
+        |]
+
+      decoder = D.rowList $ D.column (D.nonNullable D.text)
+
+      theStatement = Statement theQuery mempty decoder True
+
+  rangeExpressions <- statement () theStatement
+
+  let toEndTime expression =
+        let parts    = words $ T.unpack expression
+            endBlob   = parts !! 5
+
+            dropParens :: Read a => String -> a
+            dropParens x = read $ reverse $ drop 2 $ reverse $ drop 2 x
+        in dropParens endBlob
+      nextTime = maybe 0 (+1) $ listToMaybe $ reverse $ sort $ map toEndTime rangeExpressions
+
+      go count startIndex = do
+        createPartitionTable startIndex (startIndex + rangeLength - 1)
+        let nextCount = count - 1
+        when (nextCount > 0) $ go nextCount (startIndex + rangeLength)
+
+  go partitionCount nextTime
