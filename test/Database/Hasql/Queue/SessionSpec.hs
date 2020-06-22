@@ -64,7 +64,7 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
         (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
           $ BSC.pack $ migrationQueryString "int4")
         (flip withConn $ flip migrate "int4")
-        (verboseConfig <> cacheConfig dbCache)
+        (autoExplainConfig 1  <> cacheConfig dbCache)
   withConfig migratedConfig $ \db -> do
     f =<< createPool
       (either (throwIO . userError . show) pure =<< acquire (toConnectionString db))

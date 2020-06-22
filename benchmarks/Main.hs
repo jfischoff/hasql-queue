@@ -34,8 +34,13 @@ withSetup f = do
   let throwE x = either throwIO pure =<< x
 
   throwE $ withDbCache $ \dbCache -> do
-    --let combinedConfig = autoExplainConfig 15 <> cacheConfig dbCache
-    let combinedConfig = defaultConfig <> cacheConfig dbCache
+    -- let combinedConfig = autoExplainConfig 15 <> cacheConfig dbCache
+    let combinedConfig = defaultConfig <> cacheConfig dbCache <> mempty
+          { postgresConfigFile =
+              [ ("checkpoint_timeout", "60min")
+              , ("max_wal_size", "2GB")
+              ]
+          }
     migratedConfig <- throwE $ cacheAction (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
         $ BSC.pack $ migrationQueryString "int4")
         (flip withConn $ flip migrate "int4")

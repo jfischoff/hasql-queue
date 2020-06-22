@@ -224,7 +224,7 @@ createPartitions partitionCount rangeLength = do
       nextTime = maybe 0 (+1) $ listToMaybe $ reverse $ sort $ map toEndTime rangeExpressions
 
       go count startIndex = do
-        createPartitionTable startIndex (startIndex + rangeLength - 1)
+        createPartitionTable startIndex (startIndex + rangeLength)
         let nextCount = count - 1
         when (nextCount > 0) $ go nextCount (startIndex + rangeLength)
 

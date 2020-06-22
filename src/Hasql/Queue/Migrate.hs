@@ -92,4 +92,4 @@ migrate :: Connection
         -> IO ()
 migrate conn valueType = do
   runThrow (sql $ fromString $ migrationQueryString valueType) conn
-  runThrow (createPartitions 5 100000) conn
+  runThrow (createPartitions 2 10000000) conn
