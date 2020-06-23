@@ -87,3 +87,19 @@ executables:
       - async
       - tmp-postgres
       - resource-pool
+
+  hasql-queue-tmp-db:
+    main: Main.hs
+    source-dirs: hasql-queue-tmp-db
+    ghc-options:
+      - -O2
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+      - -g2
+    dependencies:
+      - base64-bytestring
+      - cryptohash-sha1
+      - hasql-queue
+      - async
+      - tmp-postgres
