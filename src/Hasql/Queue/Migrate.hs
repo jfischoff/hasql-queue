@@ -25,6 +25,21 @@ migrationQueryString :: String
                      -- @jsonb@.
                      -> String
 migrationQueryString valueType = [i|
+  CREATE OR REPLACE FUNCTION drop_partition_table (first_partition text, second_partition text) RETURNS BOOL AS $$
+    DECLARE
+      first_enqueued BOOL;
+      second_nonempty BOOL;
+    BEGIN
+      EXECUTE (format(E' SELECT EXISTS (SELECT id FROM %I WHERE state =\\'enqueued\\');', first_partition)) INTO first_enqueued;
+      EXECUTE (format(E' SELECT EXISTS (SELECT id FROM %I);', second_partition)) INTO second_nonempty;
+      IF (NOT first_enqueued AND second_nonempty) THEN
+        EXECUTE format(E'DROP TABLE %I;', first_partition);
+        RETURN TRUE;
+      END IF ;
+      RETURN FALSE;
+    END;
+  $$ LANGUAGE plpgsql;
+
   CREATE OR REPLACE FUNCTION create_partition_table (startValue int8, endValue int8) RETURNS void AS $$
     DECLARE
       partition_name text;
