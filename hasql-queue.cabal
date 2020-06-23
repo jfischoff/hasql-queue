@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1e85f1ecfea2da607af0d7d470a2487f040dbe1020c661774ca3ebbaec5fcf34
+-- hash: 9319fa6761fe76cc51bd10b24cb1080b5273a6f222a31978d94ebeda853dac94
 
 name:           hasql-queue
 version:        1.0.1.1
@@ -81,6 +81,36 @@ executable benchmark
     , postgresql-libpq-notify >=0.2.0.0
     , random
     , resource-pool
+    , stm
+    , text
+    , time
+    , tmp-postgres
+    , transformers
+  default-language: Haskell2010
+
+executable hasql-queue-tmp-db
+  main-is: Main.hs
+  other-modules:
+      Paths_hasql_queue
+  hs-source-dirs:
+      hasql-queue-tmp-db
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N -g2
+  build-depends:
+      aeson
+    , async
+    , base >=4.7 && <5
+    , base64-bytestring
+    , bytestring
+    , cryptohash-sha1
+    , exceptions
+    , hasql
+    , hasql-queue
+    , here
+    , monad-control
+    , postgresql-libpq
+    , postgresql-libpq-notify >=0.2.0.0
+    , random
     , stm
     , text
     , time
