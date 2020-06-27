@@ -29,6 +29,7 @@ default-extensions:
 - ScopedTypeVariables
 - TypeApplications
 - AllowAmbiguousTypes
+- RankNTypes
 
 dependencies:
 - base >=4.7 && <5
@@ -45,6 +46,8 @@ dependencies:
 - bytestring
 - stm
 - here
+- immortal
+- postgres-options
 
 library:
   source-dirs: src

@@ -13,7 +13,6 @@ import           Data.String
 import           Data.String.Here.Interpolated
 import           Hasql.Connection
 import           Hasql.Session
-import           Hasql.Queue.Session
 import           Hasql.Queue.Internal
 
 

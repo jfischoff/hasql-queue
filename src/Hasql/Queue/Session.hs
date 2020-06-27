@@ -9,8 +9,6 @@ module Hasql.Queue.Session
   , PayloadId
   , failed
   , dequeued
-  , createPartitions
-  , dropDequeuedPartitions
   ) where
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
@@ -19,12 +17,9 @@ import           Data.Functor.Contravariant
 import           Data.String.Here.Uninterpolated
 import           Hasql.Statement
 import           Hasql.Queue.Internal
-import           Data.Maybe
 import           Data.ByteString (ByteString)
-import qualified Data.Text as T
-import           Control.Monad
-import           Data.List
-import           Data.Bifunctor
+import           Data.Maybe
+
 
 {-|Enqueue a payload.
 -}
@@ -184,92 +179,3 @@ dequeued :: D.Value a
          -- ^ Count
          -> Session (PayloadId, [a])
 dequeued = listState Dequeued
-
-createPartitionTable :: Int -> Int -> Session ()
-createPartitionTable start end = do
-  let theQuery = [here|
-          SELECT create_partition_table($1, $2)
-        |]
-
-      encoder = (fst >$< E.param (E.nonNullable E.int4))
-             <> (snd >$< E.param (E.nonNullable E.int4))
-
-      theStatement = Statement theQuery encoder D.noResult True
-
-  statement (fromIntegral start, fromIntegral end) theStatement
-
-toEndTime :: T.Text -> Int
-toEndTime expression =
-  let parts    = words $ T.unpack expression
-      endBlob   = parts !! 5
-
-      dropParens x = read $ reverse $ drop 2 $ reverse $ drop 2 x
-  in dropParens endBlob
-
-createPartitions :: Int -> Int -> Session ()
-createPartitions partitionCount rangeLength = do
-  let theQuery = [here|
-        SELECT pg_catalog.pg_get_expr(c.relpartbound, c.oid)
-        FROM pg_catalog.pg_class p
-           , pg_catalog.pg_class c
-           , pg_catalog.pg_inherits i
-        WHERE c.oid=i.inhrelid AND i.inhparent = p.oid AND p.relname='payloads'
-        ORDER BY pg_catalog.pg_get_expr(c.relpartbound, c.oid) = 'DEFAULT'
-            , c.oid::pg_catalog.regclass::pg_catalog.text;
-        |]
-
-      decoder = D.rowList $ D.column (D.nonNullable D.text)
-
-      theStatement = Statement theQuery mempty decoder True
-
-  rangeExpressions <- statement () theStatement
-
-  let nextTime = maybe 0 (+1) $ listToMaybe $ reverse $ sort $ map toEndTime rangeExpressions
-
-      go count startIndex = do
-        createPartitionTable startIndex (startIndex + rangeLength)
-        let nextCount = count - 1
-        when (nextCount > 0) $ go nextCount (startIndex + rangeLength)
-
-  go partitionCount nextTime
-
-dropDequeuedPartitions :: Session Int
-dropDequeuedPartitions = do
-  let theQuery = [here|
-      SELECT c.relname, pg_catalog.pg_get_expr(c.relpartbound, c.oid)
-      FROM pg_catalog.pg_class p
-         , pg_catalog.pg_class c
-         , pg_catalog.pg_inherits i
-      WHERE c.oid=i.inhrelid AND i.inhparent = p.oid AND p.relname='payloads'
-      ORDER BY pg_catalog.pg_get_expr(c.relpartbound, c.oid) = 'DEFAULT'
-          , c.oid::pg_catalog.regclass::pg_catalog.text;
-      |]
-
-      decoder = D.rowList
-         $  (,)
-        <$> D.column (D.nonNullable D.text)
-        <*> D.column (D.nonNullable D.text)
-
-      theStatement = Statement theQuery mempty decoder True
-
-  tableNamesAndRangeExpressions <- statement () theStatement
-
-  let oldestPartitions = map snd $ sortOn fst $ map (first toEndTime) tableNamesAndRangeExpressions
-      oldestPartitionPairs = zip oldestPartitions $ tail oldestPartitions
-
-      go :: [(T.Text, T.Text)] -> Session Int
-      go [] = pure 0
-      go (x:xs) = do
-        let dropQuery = "SELECT drop_partition_table($1, $2)"
-
-            dropEncoder =  (fst >$< E.param (E.nonNullable E.text))
-                        <> (snd >$< E.param (E.nonNullable E.text))
-            dropDecoder = D.singleRow $ D.column (D.nonNullable D.bool)
-
-            dropStatment = Statement dropQuery dropEncoder dropDecoder True
-
-        statement x dropStatment >>= \case
-          True -> fmap (1 +) $ go xs
-          False -> pure 0
-
-  go oldestPartitionPairs

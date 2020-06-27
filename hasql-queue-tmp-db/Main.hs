@@ -21,7 +21,7 @@ main = either throwIO pure <=< withDbCache $ \dbCache -> do
         (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
           $ BSC.pack $ migrationQueryString "int4")
         (flip withConn $ flip migrate "int4")
-        (autoExplainConfig 1  <> cacheConfig dbCache)
+        (verboseConfig <> cacheConfig dbCache)
   withConfig migratedConfig $ \db -> do
     print $ toConnectionString db
     forever $ threadDelay 100000000

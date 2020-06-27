@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9319fa6761fe76cc51bd10b24cb1080b5273a6f222a31978d94ebeda853dac94
+-- hash: d7f17191eac83c39305d49d5dcd9d50757118e3205fd76a9058f15c09b42ce7a
 
 name:           hasql-queue
 version:        1.0.1.1
@@ -33,12 +33,13 @@ library
       Hasql.Queue.Internal
       Hasql.Queue.IO
       Hasql.Queue.Migrate
+      Hasql.Queue.Partition
       Hasql.Queue.Session
   other-modules:
       Paths_hasql_queue
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes RankNTypes
   ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls
   build-depends:
       aeson
@@ -47,7 +48,9 @@ library
     , exceptions
     , hasql
     , here
+    , immortal
     , monad-control
+    , postgres-options
     , postgresql-libpq
     , postgresql-libpq-notify >=0.2.0.0
     , random
@@ -63,7 +66,7 @@ executable benchmark
       Paths_hasql_queue
   hs-source-dirs:
       benchmarks
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes RankNTypes
   ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N -g2
   build-depends:
       aeson
@@ -76,7 +79,9 @@ executable benchmark
     , hasql
     , hasql-queue
     , here
+    , immortal
     , monad-control
+    , postgres-options
     , postgresql-libpq
     , postgresql-libpq-notify >=0.2.0.0
     , random
@@ -94,7 +99,7 @@ executable hasql-queue-tmp-db
       Paths_hasql_queue
   hs-source-dirs:
       hasql-queue-tmp-db
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes RankNTypes
   ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N -g2
   build-depends:
       aeson
@@ -107,7 +112,9 @@ executable hasql-queue-tmp-db
     , hasql
     , hasql-queue
     , here
+    , immortal
     , monad-control
+    , postgres-options
     , postgresql-libpq
     , postgresql-libpq-notify >=0.2.0.0
     , random
@@ -123,11 +130,13 @@ test-suite unit-tests
   main-is: Main.hs
   other-modules:
       Database.Hasql.Queue.IOSpec
+      Database.Hasql.Queue.PartitionSpec
       Database.Hasql.Queue.SessionSpec
+      Database.Hasql.Queue.TestUtils
       Paths_hasql_queue
   hs-source-dirs:
       test
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes RankNTypes
   ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -143,7 +152,9 @@ test-suite unit-tests
     , hspec
     , hspec-core
     , hspec-expectations-lifted
+    , immortal
     , monad-control
+    , postgres-options
     , postgresql-libpq
     , postgresql-libpq-notify >=0.2.0.0
     , random
