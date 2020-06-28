@@ -20,6 +20,7 @@ import qualified Hasql.Queue.Internal as I
 import qualified Hasql.Queue.IO as IO
 import qualified Hasql.Queue.Session as S
 import           Data.Int
+import qualified Hasql.Queue.Partition as P
 
 -- TODO need to make sure the number of producers and consumers does not go over the number of connections
 
@@ -48,9 +49,13 @@ withSetup f = do
     withConfig migratedConfig $ \db -> do
       print $ toConnectionString db
 
-      f =<< createPool
-              (either (throwIO . userError . show) pure =<< acquire (toConnectionString db)
-              ) release 2 60 49
+      let acquire' = either (throwIO . userError . show) pure =<< acquire (toConnectionString db)
+
+
+      bracket acquire' release $ \conn -> P.with (P.makeDefaultPartitionManagerConfig (\g -> g conn)) $
+        f =<< createPool acquire' release 2 60 49
+
+--      f =<< createPool acquire' release 2 60 49
 
 payload :: Int32
 payload = 1

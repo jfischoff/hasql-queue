@@ -19,8 +19,6 @@ import           Control.Monad
 import           Data.List
 import           Data.Bifunctor
 import           Data.Maybe
-import           Debug.Trace
-
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -270,7 +268,7 @@ createPartitionTable start end = do
 
 toEndTime :: T.Text -> Int
 toEndTime expression =
-  let parts    = words $ T.unpack $ trace ("expression " ++ T.unpack expression) expression
+  let parts    = words $ T.unpack expression
       endBlob   = parts !! 5
 
       dropParens x = read $ reverse $ drop 2 $ reverse $ drop 2 x
@@ -294,7 +292,7 @@ createPartitions partitionCount rangeLength = do
 
   rangeExpressions <- statement () theStatement
 
-  let nextTime = maybe 0 (+1) $ listToMaybe $ reverse $ sort $ map toEndTime rangeExpressions
+  let nextTime = fromMaybe 0 $ listToMaybe $ reverse $ sort $ map toEndTime rangeExpressions
 
       go count startIndex = do
         when (count > 0) $ do

@@ -38,6 +38,16 @@ data PartitionManagerConfig = PartitionManagerConfig
   , pmcHandlers           :: PartitionManagerHandlers
   }
 
+makeDefaultPartitionManagerConfig
+  :: (forall a. ((Connection -> IO a) -> IO a))
+  -> PartitionManagerConfig
+makeDefaultPartitionManagerConfig pmcConnection =
+  let pmcDelay          = 10
+      pmcRangeLength    = 100000
+      pmcPartitionCount = 2
+      pmcHandlers       = mempty
+  in PartitionManagerConfig {..}
+
 start :: PartitionManagerConfig -> IO PartitionManager
 start PartitionManagerConfig {..} = do
   let PartitionManagerHandlers {..} = pmcHandlers
@@ -60,3 +70,6 @@ stop :: PartitionManager -> IO ()
 stop PartitionManager {..} = do
   I.stop partitionManagerThread
   I.wait partitionManagerThread
+
+with :: PartitionManagerConfig -> IO a -> IO a
+with config action = bracket (start config) stop $ \_ -> action
