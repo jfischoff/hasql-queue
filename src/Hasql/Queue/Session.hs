@@ -17,8 +17,9 @@ import           Data.Functor.Contravariant
 import           Data.String.Here.Uninterpolated
 import           Hasql.Statement
 import           Hasql.Queue.Internal
-import           Data.Maybe
 import           Data.ByteString (ByteString)
+import           Data.Maybe
+
 
 {-|Enqueue a payload.
 -}
@@ -74,8 +75,7 @@ dequeue :: D.Value a
         -> Session [a]
 dequeue valueDecoder count = do
   let multipleQuery = [here|
-        UPDATE payloads
-        SET state='dequeued'
+        DELETE FROM payloads
         WHERE id in
           ( SELECT p1.id
             FROM payloads AS p1
@@ -89,8 +89,7 @@ dequeue valueDecoder count = do
       multipleEncoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
 
       singleQuery = [here|
-        UPDATE payloads
-        SET state='dequeued'
+        DELETE FROM payloads
         WHERE id in
           ( SELECT p1.id
             FROM payloads AS p1
