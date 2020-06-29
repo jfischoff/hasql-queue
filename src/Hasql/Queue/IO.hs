@@ -8,7 +8,6 @@ module Hasql.Queue.IO
   -- ** Listing API
   , I.PayloadId
   , failed
-  , dequeued
   -- ** Advanced API
   , withDequeueWith
   , I.WithNotifyHandlers (..)
@@ -78,23 +77,6 @@ failed :: Connection
        -- ^ Count
        -> IO (I.PayloadId, [a])
 failed conn decoder mPayload count = I.runThrow (S.failed decoder mPayload count) conn
-
-{-|
-Retrieve the payloads that have been successfully dequeued.
-The function returns a list of values and an id. The id is used the starting
-place for the next batch of values. If 'Nothing' is passed the list starts at the
-beginning.
--}
-dequeued :: Connection
-         -> D.Value a
-         -- ^ Payload decoder
-         -> Maybe I.PayloadId
-         -- ^ Starting position of payloads. Pass 'Nothing' to
-         --   start at the beginning
-         -> Int
-         -- ^ Count
-         -> IO (I.PayloadId, [a])
-dequeued conn decoder mPayload count = I.runThrow (S.dequeued decoder mPayload count) conn
 
 {-|
 A more general configurable version of 'withDequeue'. Unlike 'withDequeue' one
