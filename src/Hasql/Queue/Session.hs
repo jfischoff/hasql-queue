@@ -89,7 +89,7 @@ dequeue valueDecoder count = do
 
       singleQuery = [here|
         DELETE FROM payloads
-        WHERE id in
+        WHERE id =
           ( SELECT p1.id
             FROM payloads AS p1
             WHERE p1.state='enqueued'
