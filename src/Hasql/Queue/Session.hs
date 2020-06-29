@@ -31,8 +31,8 @@ enqueue theEncoder = \case
   [x] -> do
     let theQuery =
           [here|
-            INSERT INTO payloads (attempts, value)
-            VALUES (0, $1)
+            INSERT INTO payloads (value)
+            VALUES ($1)
           |]
 
         encoder = E.param $ E.nonNullable theEncoder
@@ -42,8 +42,8 @@ enqueue theEncoder = \case
   xs -> do
     let theQuery =
           [here|
-            INSERT INTO payloads (attempts, value)
-            SELECT 0, * FROM unnest($1)
+            INSERT INTO payloads (value)
+            SELECT * FROM unnest($1)
           |]
 
         encoder = E.param $ E.nonNullable $ E.foldableArray $ E.nonNullable theEncoder

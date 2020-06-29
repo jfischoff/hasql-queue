@@ -53,7 +53,7 @@ migrationQueryString valueType = [i|
  DO $$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'state_t') THEN
-      CREATE TYPE state_t AS ENUM ('enqueued', 'dequeued', 'failed');
+      CREATE TYPE state_t AS ENUM ('enqueued', 'failed');
     END IF;
   END$$;
 
@@ -65,7 +65,7 @@ migrationQueryString valueType = [i|
   , state state_t NOT NULL DEFAULT 'enqueued'
   , modified_at int8 NOT NULL DEFAULT nextval('modified_index')
   , value VALUE_TYPE NOT NULL
-  ) WITH (fillfactor = 50);
+  );
 
   CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at)
     WHERE (state = 'enqueued');

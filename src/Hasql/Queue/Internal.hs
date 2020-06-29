@@ -81,12 +81,11 @@ payloadIdDecoder = PayloadId <$> D.int8
 payloadIdRow :: D.Row PayloadId
 payloadIdRow = D.column (D.nonNullable payloadIdDecoder)
 
--- TODO include special cases for single element insertion
 enqueuePayload :: E.Value a -> [a] -> Session [PayloadId]
 enqueuePayload theEncoder values = do
   let theQuery = [here|
-        INSERT INTO payloads (attempts, value)
-        SELECT 0, * FROM unnest($1)
+        INSERT INTO payloads (value)
+        SELECT * FROM unnest($1)
         RETURNING id
         |]
       encoder = E.param $ E.nonNullable $ E.foldableArray $ E.nonNullable theEncoder
