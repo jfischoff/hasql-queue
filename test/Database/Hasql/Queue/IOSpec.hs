@@ -169,11 +169,7 @@ spec = describe "Hasql.Queue.IO" $ do
         when (count < 1) $ throwIO FailedwithDequeue
         pure '!') `shouldReturn` '!'
 
-      Just Payload {..} <- getPayload conn D.int4 payloadId
-
-      pState `shouldBe` I.Dequeued
-      -- Failed attempts I guess
-      pAttempts  `shouldBe` 1
+      getPayload conn D.int4 payloadId `shouldReturn` Nothing
 
     it "enqueues and dequeues concurrently withDequeue" $ \testDB -> do
       let withPool' = flip withConnection testDB

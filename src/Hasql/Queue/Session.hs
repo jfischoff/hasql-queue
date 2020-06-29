@@ -8,7 +8,6 @@ module Hasql.Queue.Session
   -- ** Listing API
   , PayloadId
   , failed
-  , dequeued
   ) where
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
@@ -161,19 +160,3 @@ failed :: D.Value a
        -- ^ Count
        -> Session (PayloadId, [a])
 failed = listState Failed
-
-{-|
-Retrieve the payloads that have been successfully dequeued.
-The function returns a list of values and an id. The id is used the starting
-place for the next batch of values. If 'Nothing' is passed the list starts at the
-beginning.
--}
-dequeued :: D.Value a
-         -- ^ Payload decoder
-         -> Maybe PayloadId
-         -- ^ Starting position of payloads. Pass 'Nothing' to
-         --   start at the beginning
-         -> Int
-         -- ^ Count
-         -> Session (PayloadId, [a])
-dequeued = listState Dequeued

@@ -21,7 +21,7 @@ import qualified Database.PostgreSQL.LibPQ as PQ
 --   so some sort of process can occur with it, usually something in 'IO'.
 --   Once the processing is complete, the `Payload' is moved the 'Dequeued'
 --   state, which is the terminal state.
-data State = Enqueued | Dequeued | Failed
+data State = Enqueued | Failed
   deriving (Show, Eq, Ord, Enum, Bounded)
 
 state :: E.Params a -> D.Result b -> ByteString -> Statement a b
@@ -31,8 +31,6 @@ stateDecoder :: D.Value State
 stateDecoder = D.enum $ \txt ->
   if txt == "enqueued" then
     pure Enqueued
-  else if txt == "dequeued" then
-    pure Dequeued
   else if txt == "failed" then
     pure Failed
   else Nothing
@@ -40,7 +38,6 @@ stateDecoder = D.enum $ \txt ->
 stateEncoder :: E.Value State
 stateEncoder = E.enum $ \case
   Enqueued -> "enqueued"
-  Dequeued -> "dequeued"
   Failed   -> "failed"
 
 initialPayloadId :: PayloadId
@@ -101,8 +98,7 @@ enqueuePayload theEncoder values = do
 dequeuePayload :: D.Value a -> Int -> Session [Payload a]
 dequeuePayload valueDecoder count = do
   let multipleQuery = [here|
-        UPDATE payloads
-        SET state='dequeued'
+        DELETE FROM payloads
         WHERE id in
           ( SELECT p1.id
             FROM payloads AS p1
@@ -116,8 +112,7 @@ dequeuePayload valueDecoder count = do
       multipleEncoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
 
       singleQuery = [here|
-        UPDATE payloads
-        SET state='dequeued'
+        DELETE FROM payloads
         WHERE id in
           ( SELECT p1.id
             FROM payloads AS p1
