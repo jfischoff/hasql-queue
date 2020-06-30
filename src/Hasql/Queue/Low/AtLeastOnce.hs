@@ -1,8 +1,7 @@
 {-|
-IO based API for a PostgreSQL backed queue. The API utilizes PostgreSQL
-notifications.
+A high throughput 'Session' based API for a PostgreSQL backed queue.
 -}
-module Hasql.Queue.IO
+module Hasql.Queue.Low.AtLeastOnce
   ( enqueue
   , withDequeue
   -- ** Listing API
@@ -13,7 +12,7 @@ module Hasql.Queue.IO
   , I.WithNotifyHandlers (..)
   ) where
 
-import qualified Hasql.Queue.Session as S
+import qualified Hasql.Queue.High.ExactlyOnce as S
 import qualified Hasql.Queue.Internal as I
 import           Hasql.Connection
 import qualified Hasql.Encoders as E

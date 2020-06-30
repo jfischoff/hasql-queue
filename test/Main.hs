@@ -1,6 +1,6 @@
 import           Test.Hspec
-import           Database.Hasql.Queue.SessionSpec as S
-import           Database.Hasql.Queue.IOSpec as I
+import           Hasql.Queue.High.ExactlyOnceSpec as S
+import           Hasql.Queue.Low.AtLeastOnceSpec as I
 
 
 main :: IO ()

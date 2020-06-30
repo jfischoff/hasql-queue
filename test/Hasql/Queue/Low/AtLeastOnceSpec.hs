@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-module Database.Hasql.Queue.IOSpec where
+module Hasql.Queue.Low.AtLeastOnceSpec where
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Concurrent.Async
@@ -11,7 +11,7 @@ import           Data.Aeson
 import           Data.Function
 import           Data.IORef
 import           Data.List
-import           Hasql.Queue.IO
+import           Hasql.Queue.Low.AtLeastOnce
 import           Hasql.Queue.Migrate
 import           Test.Hspec                     (SpecWith, Spec, describe, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
@@ -117,7 +117,7 @@ data FailedwithDequeue = FailedwithDequeue
 instance Exception FailedwithDequeue
 
 spec :: Spec
-spec = describe "Hasql.Queue.IO" $ do
+spec = describe "Hasql.Queue.Low.AtLeastOnce" $ do
   aroundAll withSetup $ describe "basic" $ do
     it "withDequeue blocks until something is enqueued: before" $ withConnection $ \conn -> do
       void $ enqueue channel conn E.int4 [1]

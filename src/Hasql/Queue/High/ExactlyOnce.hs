@@ -1,7 +1,7 @@
 {-|
-'Session' based API for a PostgreSQL backed queue.
+A high throughput 'Session' based API for a PostgreSQL backed queue.
 -}
-module Hasql.Queue.Session
+module Hasql.Queue.High.ExactlyOnce
   ( enqueue
   , enqueueNotify
   , dequeue

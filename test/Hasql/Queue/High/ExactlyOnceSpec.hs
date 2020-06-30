@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-module Database.Hasql.Queue.SessionSpec where
+module Hasql.Queue.High.ExactlyOnceSpec where
 import           Hasql.Queue.Internal
 import           Control.Concurrent
 import           Control.Concurrent.Async
 import           Control.Exception as E
 import           Control.Monad
 import           Data.IORef
-import           Hasql.Queue.Session
+import           Hasql.Queue.High.ExactlyOnce
 import           Hasql.Queue.Migrate
 import           Test.Hspec                     (SpecWith, Spec, describe, parallel, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
@@ -103,7 +103,7 @@ newtype TooManyRetries = TooManyRetries Int64
 instance Exception TooManyRetries
 
 spec :: Spec
-spec = describe "Hasql.Queue.Session" $ parallel $ do
+spec = describe "Hasql.Queue.High.ExactlyOnce" $ parallel $ do
   sequential $ aroundAll withSetup $ describe "basic" $ do
     it "is okay to migrate multiple times" $ withConnection $ \conn ->
       liftIO $ migrate conn "int4"
