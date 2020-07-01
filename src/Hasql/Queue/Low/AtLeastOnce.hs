@@ -12,7 +12,7 @@ module Hasql.Queue.Low.AtLeastOnce
   , I.WithNotifyHandlers (..)
   ) where
 
-import qualified Hasql.Queue.High.ExactlyOnce as S
+import qualified Hasql.Queue.Low.ExactlyOnce as S
 import qualified Hasql.Queue.Internal as I
 import           Hasql.Connection
 import qualified Hasql.Encoders as E
@@ -32,7 +32,7 @@ enqueue :: ByteString
         -> [a]
         -- ^ List of payloads to enqueue
         -> IO ()
-enqueue channel conn encoder xs = I.runThrow (S.enqueueNotify channel encoder xs) conn
+enqueue channel conn encoder xs = I.runThrow (S.enqueue channel encoder xs) conn
 
 {-|
 Wait for the next payload and process it. If the continuation throws an
@@ -75,7 +75,7 @@ failed :: Connection
        -> Int
        -- ^ Count
        -> IO (I.PayloadId, [a])
-failed conn decoder mPayload count = I.runThrow (S.failed decoder mPayload count) conn
+failed conn decoder mPayload count = I.runThrow (I.failed decoder mPayload count) conn
 
 {-|
 A more general configurable version of 'withDequeue'. Unlike 'withDequeue' one

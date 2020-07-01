@@ -9,6 +9,7 @@ import           Control.Exception as E
 import           Control.Monad
 import           Data.IORef
 import           Hasql.Queue.High.ExactlyOnce
+import qualified Hasql.Queue.Low.ExactlyOnce as Low
 import           Hasql.Queue.Migrate
 import           Test.Hspec                     (SpecWith, Spec, describe, parallel, it, afterAll, beforeAll, runIO)
 import           Test.Hspec.Expectations.Lifted
@@ -133,7 +134,7 @@ spec = describe "Hasql.Queue.High.ExactlyOnce" $ parallel $ do
 
     it "enqueue/withDequeue" $ \pool -> do
       (withDequeueResult, firstCount, secondCount) <- runReadCommitted pool $ do
-        enqueueNotify "hey" E.int4 [1]
+        Low.enqueue "hey" E.int4 [1]
         firstCount <- getCount
         withDequeueResult <- withDequeue D.int4 8 1 (`shouldBe` [1])
 

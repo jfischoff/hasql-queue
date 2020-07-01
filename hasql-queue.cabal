@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8e866909eb34330b518ca1996efc6ae84d3a96e127ad0f0a9347dc5f8026596c
+-- hash: d6d1e01482cc489c72e987e4600fbc7bb0a98ada3e9226fec42cf6cd2d397cbc
 
 name:           hasql-queue
 version:        1.0.1.1
@@ -30,10 +30,13 @@ source-repository head
 
 library
   exposed-modules:
+      Hasql.Queue.High.AtLeastOnce
+      Hasql.Queue.High.AtMostOnce
       Hasql.Queue.High.ExactlyOnce
       Hasql.Queue.Internal
       Hasql.Queue.Low.AtLeastOnce
       Hasql.Queue.Low.AtMostOnce
+      Hasql.Queue.Low.ExactlyOnce
       Hasql.Queue.Migrate
   other-modules:
       Paths_hasql_queue

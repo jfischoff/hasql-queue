@@ -15,6 +15,7 @@ import           Control.Exception
 import           Control.Monad.IO.Class
 import           Data.Typeable
 import qualified Database.PostgreSQL.LibPQ as PQ
+import           Data.Maybe
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -178,6 +179,7 @@ incrementAttempts retryCount pids = do
 -- This should use bracketOnError
 withDequeue :: D.Value a -> Int -> Int -> ([a] -> IO b) -> Session (Maybe b)
 withDequeue decoder retryCount count f = do
+  -- TODO turn to a save point
   sql "BEGIN;SAVEPOINT temp"
   dequeuePayload decoder count >>= \case
     [] ->  Nothing <$ sql "COMMIT"
@@ -242,3 +244,55 @@ withNotifyWith WithNotifyHandlers {..} channel conn action theCast = bracket_
         notifyPayload channel conn
         restart
       Just xs -> pure xs
+
+fst3 :: (a, b, c) -> a
+fst3 (x, _, _) = x
+
+snd3 :: (a, b, c) -> b
+snd3 (_, x, _) = x
+
+trd3 :: (a, b, c) -> c
+trd3 (_, _, x) = x
+
+listState :: State -> D.Value a -> Maybe PayloadId -> Int -> Session (PayloadId, [a])
+listState theState valueDecoder mPayloadId count = do
+  let theQuery = [here|
+        SELECT id, value
+        FROM payloads
+        WHERE state = ($1 :: state_t)
+          AND id > $2
+        ORDER BY id ASC
+        LIMIT $3
+        |]
+      encoder = (fst3 >$< E.param (E.nonNullable stateEncoder))
+             <> (snd3 >$< E.param (E.nonNullable payloadIdEncoder))
+             <> (trd3 >$< E.param (E.nonNullable E.int4))
+
+      decoder =  D.rowList
+              $  (,)
+             <$> D.column (D.nonNullable payloadIdDecoder)
+             <*> D.column (D.nonNullable valueDecoder)
+      theStatement = Statement theQuery encoder decoder True
+
+      defaultPayloadId = fromMaybe initialPayloadId mPayloadId
+
+  idsAndValues <- statement (theState, defaultPayloadId, fromIntegral count) theStatement
+  pure $ case idsAndValues of
+    [] -> (defaultPayloadId, [])
+    xs -> (fst $ last xs, map snd xs)
+
+{-|
+Retrieve the payloads that have entered a failed state. See 'withDequeue' for how that
+occurs. The function returns a list of values and an id. The id is used the starting
+place for the next batch of values. If 'Nothing' is passed the list starts at the
+beginning.
+-}
+failed :: D.Value a
+       -- ^ Payload decoder
+       -> Maybe PayloadId
+       -- ^ Starting position of payloads. Pass 'Nothing' to
+       --   start at the beginning
+       -> Int
+       -- ^ Count
+       -> Session (PayloadId, [a])
+failed = listState Failed
