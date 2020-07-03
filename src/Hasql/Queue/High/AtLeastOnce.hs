@@ -57,8 +57,13 @@ failures :: Connection
          --   start at the beginning
          -> Int
          -- ^ Count
-         -> IO (I.PayloadId, [a])
-failures conn decoder mPayload count = I.runThrow (I.failed decoder mPayload count) conn
+         -> IO [(I.PayloadId, a)]
+failures conn decoder mPayload count = I.runThrow (I.failures decoder mPayload count) conn
+
+delete :: Connection
+       -> [I.PayloadId]
+       -> IO ()
+delete conn xs = I.runThrow (I.delete xs) conn
 
 {-|
 A more general configurable version of 'withDequeue'. Unlike 'withDequeue' one

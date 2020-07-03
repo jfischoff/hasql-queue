@@ -8,7 +8,6 @@ import           Control.Exception as E
 import           Control.Monad
 import           Hasql.Queue.High.ExactlyOnce
 import qualified Hasql.Queue.Low.ExactlyOnce as Low
-import           Hasql.Queue.Migrate
 import           Test.Hspec                     (Spec, describe, parallel, it)
 import           Test.Hspec.Expectations.Lifted
 import           Control.Monad.Catch
@@ -20,6 +19,8 @@ import           Data.Typeable
 import           Data.Int
 import           Hasql.Queue.TestUtils
 
+-- Fix this to be more of what I would expec
+
 newtype TooManyRetries = TooManyRetries Int64
   deriving (Show, Eq, Typeable)
 
@@ -28,15 +29,13 @@ instance Exception TooManyRetries
 spec :: Spec
 spec = describe "Hasql.Queue.High.ExactlyOnce" $ parallel $ do
   sequential $ aroundAll withSetup $ describe "basic" $ do
-    it "is okay to migrate multiple times" $ withConnection $ \conn ->
-      liftIO $ migrate conn "int4"
 
     it "empty locks nothing" $ \pool -> do
       runReadCommitted pool (withDequeue D.int4 8 1 return) >>= \x ->
         x `shouldBe` Nothing
     it "empty gives count 0" $ \pool ->
       runReadCommitted pool getCount `shouldReturn` 0
-
+{-
     it "failed paging works" $ \pool -> do
       runImplicitTransaction pool $ enqueue E.int4 [1,2,3,4]
 
@@ -53,6 +52,7 @@ spec = describe "Hasql.Queue.High.ExactlyOnce" $ parallel $ do
 
       a `shouldBe` [1,2]
       b `shouldBe` [3,4]
+-}
 
     it "enqueue/withDequeue" $ \pool -> do
       (withDequeueResult, firstCount, secondCount) <- runReadCommitted pool $ do

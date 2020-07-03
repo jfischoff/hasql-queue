@@ -4,9 +4,6 @@ A high throughput 'Session' based API for a PostgreSQL backed queue.
 module Hasql.Queue.High.ExactlyOnce
   ( enqueue
   , dequeue
-  -- ** Listing API
-  , PayloadId
-  , failed
   ) where
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
@@ -14,7 +11,6 @@ import           Hasql.Session
 import           Data.Functor.Contravariant
 import           Data.String.Here.Uninterpolated
 import           Hasql.Statement
-import           Hasql.Queue.Internal
 
 
 

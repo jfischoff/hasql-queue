@@ -237,7 +237,7 @@ snd3 (_, x, _) = x
 trd3 :: (a, b, c) -> c
 trd3 (_, _, x) = x
 
-listState :: State -> D.Value a -> Maybe PayloadId -> Int -> Session (PayloadId, [a])
+listState :: State -> D.Value a -> Maybe PayloadId -> Int -> Session [(PayloadId, a)]
 listState theState valueDecoder mPayloadId count = do
   let theQuery = [here|
         SELECT id, value
@@ -259,26 +259,22 @@ listState theState valueDecoder mPayloadId count = do
 
       defaultPayloadId = fromMaybe initialPayloadId mPayloadId
 
-  idsAndValues <- statement (theState, defaultPayloadId, fromIntegral count) theStatement
-  pure $ case idsAndValues of
-    [] -> (defaultPayloadId, [])
-    xs -> (fst $ last xs, map snd xs)
-
+  statement (theState, defaultPayloadId, fromIntegral count) theStatement
 {-|
 Retrieve the payloads that have entered a failed state. See 'withDequeue' for how that
 occurs. The function returns a list of values and an id. The id is used the starting
 place for the next batch of values. If 'Nothing' is passed the list starts at the
 beginning.
 -}
-failed :: D.Value a
-       -- ^ Payload decoder
-       -> Maybe PayloadId
-       -- ^ Starting position of payloads. Pass 'Nothing' to
-       --   start at the beginning
-       -> Int
-       -- ^ Count
-       -> Session (PayloadId, [a])
-failed = listState Failed
+failures :: D.Value a
+         -- ^ Payload decoder
+         -> Maybe PayloadId
+         -- ^ Starting position of payloads. Pass 'Nothing' to
+         --   start at the beginning
+         -> Int
+         -- ^ Count
+         -> Session [(PayloadId, a)]
+failures = listState Failed
 
 -- Move to Internal
 -- This should use bracketOnError
@@ -297,3 +293,17 @@ withDequeue decoder retryCount count f = do
            sql "COMMIT"
            liftIO (throwIO e)
         Right x ->  x <$ sql "COMMIT"
+
+delete :: [PayloadId] -> Session ()
+delete xs = do
+  let theQuery = [here|
+        DELETE FROM payloads
+        WHERE id = ANY($1)
+        |]
+
+      encoder = E.param
+              $ E.nonNullable
+              $ E.foldableArray
+              $ E.nonNullable payloadIdEncoder
+
+  statement xs $ Statement theQuery encoder D.noResult True

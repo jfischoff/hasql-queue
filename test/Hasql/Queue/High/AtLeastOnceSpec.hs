@@ -47,12 +47,22 @@ spec = describe "Hasql.Queue.High.AtLeastOnce" $ parallel $ do
 
       withDequeue conn D.int4 1 2 pure `shouldReturn` Just [3]
 
-    it "withDequeue fails if throws occur and retry is zero" $ withConnection $ \conn -> do
+    it "withDequeue fails if a non IOError is thrown" $ withConnection $ \conn -> do
       enqueue conn E.int4 [1]
       handle (\FailedwithDequeue -> pure Nothing) $
-        withDequeue conn D.int4 0 1 $ \_ -> throwIO FailedwithDequeue
+        withDequeue conn D.int4 2 1 $ \_ -> throwIO FailedwithDequeue
 
-      fmap snd (failures conn D.int4 Nothing 1) `shouldReturn` [1]
+      failures conn D.int4 Nothing 1 `shouldReturn` []
+      withDequeue conn D.int4 0 1 pure `shouldReturn` Just [1]
+
+    it "withDequeue fails if throws occur and retry is zero" $ withConnection $ \conn -> do
+      enqueue conn E.int4 [1]
+      handle (\(_ :: IOError) -> pure Nothing) $
+        withDequeue conn D.int4 0 1 $ \_ -> throwIO $ userError "hey"
+
+      [(pId, x)] <- failures conn D.int4 Nothing 1
+      x `shouldBe` 1
+      delete conn [pId]
 
     it "withDequeue succeeds even if the first attempt fails" $ withConnection $ \conn -> do
       enqueue conn E.int4 [1]
@@ -67,3 +77,16 @@ spec = describe "Hasql.Queue.High.AtLeastOnce" $ parallel $ do
 
       withDequeue conn D.int4 1 1 pure `shouldReturn` Nothing
       readIORef ref `shouldReturn` 2
+
+    it "failures paging works" $ withConnection $ \conn -> do
+      enqueue conn E.int4 [2]
+      enqueue conn E.int4 [3]
+
+      handle (\(_ :: IOError) -> pure Nothing) $
+        withDequeue conn D.int4 0 1 $ \_ -> throwIO $ userError "fds"
+      handle (\(_ :: IOError) -> pure Nothing) $
+        withDequeue conn D.int4 0 1 $ \_ -> throwIO $ userError "fds"
+
+      [(next, x)] <- failures conn D.int4 Nothing 1
+      x `shouldBe` 2
+      fmap (fmap snd) (failures conn D.int4 (Just next) 2) `shouldReturn` [3]
