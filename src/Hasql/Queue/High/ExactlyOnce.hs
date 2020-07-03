@@ -17,6 +17,7 @@ import           Hasql.Statement
 import           Hasql.Queue.Internal
 
 
+
 {-|Enqueue a payload.
 -}
 enqueue :: E.Value a
@@ -92,5 +93,3 @@ dequeue valueDecoder count = do
         1 -> Statement singleQuery singleEncoder decoder True
         _ -> Statement multipleQuery multipleEncoder decoder True
   statement count theStatement
-
--- TODO move withDequeue here

@@ -12,10 +12,10 @@ import           Data.String.Here.Uninterpolated
 import           Hasql.Statement
 import           Data.ByteString (ByteString)
 import           Control.Exception
-import           Control.Monad.IO.Class
 import           Data.Typeable
 import qualified Database.PostgreSQL.LibPQ as PQ
 import           Data.Maybe
+import           Control.Monad.IO.Class
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -174,24 +174,7 @@ incrementAttempts retryCount pids = do
 
   statement (fromIntegral retryCount, pids) theStatement
 
--- | Dequeue and
---   Move to Internal
--- This should use bracketOnError
-withDequeue :: D.Value a -> Int -> Int -> ([a] -> IO b) -> Session (Maybe b)
-withDequeue decoder retryCount count f = do
-  -- TODO turn to a save point
-  sql "BEGIN;SAVEPOINT temp"
-  dequeuePayload decoder count >>= \case
-    [] ->  Nothing <$ sql "COMMIT"
-    xs -> fmap Just $ do
-      liftIO (try $ f $ fmap pValue xs) >>= \case
-        Left  (e :: SomeException) -> do
-           sql "ROLLBACK TO SAVEPOINT temp; RELEASE SAVEPOINT temp"
-           let pids = fmap pId xs
-           incrementAttempts retryCount pids
-           sql "COMMIT"
-           liftIO (throwIO e)
-        Right x ->  x <$ sql "COMMIT"
+
 
 -- TODO remove
 newtype QueryException = QueryException QueryError
@@ -296,3 +279,21 @@ failed :: D.Value a
        -- ^ Count
        -> Session (PayloadId, [a])
 failed = listState Failed
+
+-- Move to Internal
+-- This should use bracketOnError
+withDequeue :: D.Value a -> Int -> Int -> ([a] -> IO b) -> Session (Maybe b)
+withDequeue decoder retryCount count f = do
+  -- TODO turn to a save point
+  sql "BEGIN;SAVEPOINT temp"
+  dequeuePayload decoder count >>= \case
+    [] ->  Nothing <$ sql "COMMIT"
+    xs -> fmap Just $ do
+      liftIO (try $ f $ fmap pValue xs) >>= \case
+        Left  (e :: SomeException) -> do
+           sql "ROLLBACK TO SAVEPOINT temp; RELEASE SAVEPOINT temp"
+           let pids = fmap pId xs
+           incrementAttempts retryCount pids
+           sql "COMMIT"
+           liftIO (throwIO e)
+        Right x ->  x <$ sql "COMMIT"
