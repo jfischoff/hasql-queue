@@ -26,6 +26,7 @@ enqueue :: E.Value a
         -- ^ List of payloads to enqueue
         -> Session ()
 enqueue theEncoder = \case
+  []  -> pure ()
   [x] -> do
     let theQuery =
           [here|
@@ -57,7 +58,9 @@ dequeue :: D.Value a
         -> Int
         -- ^ Element count
         -> Session [a]
-dequeue valueDecoder count = do
+dequeue valueDecoder count
+  | count <= 0 = pure []
+  | otherwise = do
   let multipleQuery = [here|
         DELETE FROM payloads
         WHERE id in
