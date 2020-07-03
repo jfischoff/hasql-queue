@@ -49,16 +49,16 @@ occurs. The function returns a list of values and an id. The id is used the star
 place for the next batch of values. If 'Nothing' is passed the list starts at the
 beginning.
 -}
-failed :: Connection
-       -> D.Value a
-       -- ^ Payload decoder
-       -> Maybe I.PayloadId
-       -- ^ Starting position of payloads. Pass 'Nothing' to
-       --   start at the beginning
-       -> Int
-       -- ^ Count
-       -> IO (I.PayloadId, [a])
-failed conn decoder mPayload count = I.runThrow (I.failed decoder mPayload count) conn
+failures :: Connection
+         -> D.Value a
+         -- ^ Payload decoder
+         -> Maybe I.PayloadId
+         -- ^ Starting position of payloads. Pass 'Nothing' to
+         --   start at the beginning
+         -> Int
+         -- ^ Count
+         -> IO (I.PayloadId, [a])
+failures conn decoder mPayload count = I.runThrow (I.failed decoder mPayload count) conn
 
 {-|
 A more general configurable version of 'withDequeue'. Unlike 'withDequeue' one
