@@ -9,7 +9,7 @@ system.
 {-# OPTIONS_HADDOCK prune #-}
 {-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
 module Hasql.Queue.Migrate where
-import           Control.Monad
+import qualified Hasql.Queue.Internal as I
 import           Data.String
 import           Data.String.Here.Interpolated
 import           Hasql.Connection
@@ -77,5 +77,15 @@ migrate :: Connection
         -> String
         -- ^ The type of the @value@ column
         -> IO ()
-migrate conn valueType = void $
-  run (sql $ fromString $ migrationQueryString valueType) conn
+migrate conn valueType =
+  I.runThrow (sql $ fromString $ migrationQueryString valueType) conn
+
+teardown :: Connection -> IO ()
+teardown conn = do
+  let theQuery = [i|
+        DROP TABLE IF EXISTS payloads;
+        DROP TYPE IF EXISTS state_t;
+        DROP SEQUENCE IF EXISTS modified_index;
+      |]
+
+  I.runThrow (sql theQuery) conn
