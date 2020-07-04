@@ -1,9 +1,9 @@
 module Hasql.Queue.Low.ExactlyOnceSpec where
 import           Control.Exception as E
 import           Hasql.Queue.Low.ExactlyOnce
-import           Test.Hspec                     (Spec, describe, parallel, it)
+import qualified Hasql.Queue.Internal as I
+import           Test.Hspec                     (Spec, describe, it)
 import           Test.Hspec.Expectations.Lifted
-import           Test.Hspec.Core.Spec (sequential)
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Data.Typeable
@@ -14,6 +14,8 @@ import           Data.ByteString(ByteString)
 import           Control.Concurrent.Async
 import           Hasql.Queue.Internal (runThrow)
 import           Hasql.Session
+import           Control.Concurrent
+import           Control.Monad
 
 -- Fix this to be more of what I would expec
 
@@ -29,8 +31,8 @@ runSession :: Session [a] -> Session [a]
 runSession = id
 
 spec :: Spec
-spec = describe "Hasql.Queue.High.ExactlyOnce" $ parallel $ do
-  sequential $ aroundAll withSetup $ describe "enqueue/dequeue" $ do
+spec = describe "Hasql.Queue.High.ExactlyOnce" $ do
+  aroundAll withSetup $ describe "enqueue/withDequeue" $ do
     it "enqueue nothing timesout" $ withConnection $ \conn -> do
       runThrow (enqueue channel E.int4 []) conn
       timeout 100000 (withDequeue channel conn D.int4 1 runSession) `shouldReturn` Nothing
@@ -54,7 +56,31 @@ spec = describe "Hasql.Queue.High.ExactlyOnce" $ parallel $ do
 
       withDequeue channel conn D.int4 1 runSession `shouldReturn` [3]
 
-    it "dequeueing blocks until something is enqueued" $ withConnection2 $ \(conn1, conn2) -> do
+    it "withDequeue blocks until something is enqueued: before" $ withConnection $ \conn -> do
+      void $ runThrow (enqueue channel E.int4 [1]) conn
+      res <- withDequeue channel conn D.int4 1 id
+      res `shouldBe` [1]
+
+    it "withDequeue blocks until something is enqueued: during" $ withConnection $ \conn -> do
+      afterActionMVar  <- newEmptyMVar
+      beforeNotifyMVar <- newEmptyMVar
+
+      let handlers = I.WithNotifyHandlers
+            { withNotifyHandlersAfterAction        = putMVar afterActionMVar ()
+            , withNotifyHandlersBeforeNotification = takeMVar beforeNotifyMVar
+            }
+
+      -- This is the definition of IO.dequeue
+      resultThread <- async $ withDequeueWith handlers channel conn D.int4 1 id
+      takeMVar afterActionMVar
+
+      void $ runThrow (enqueue "hey" E.int4 [1]) conn
+
+      putMVar beforeNotifyMVar ()
+
+      wait resultThread `shouldReturn` [1]
+
+    it "withDequeue blocks until something is enqueued: after" $ withConnection2 $ \(conn1, conn2) -> do
       thread <- async $ withDequeue channel conn1 D.int4 1 runSession
       timeout 100000 (wait thread) `shouldReturn` Nothing
 
