@@ -63,6 +63,10 @@ withSetup f = either throwIO pure <=< withDbCache $ \dbCache -> do
 withConnection :: (Connection -> IO ()) -> Pool Connection -> IO ()
 withConnection = flip withResource
 
+withConnection2 :: ((Connection, Connection) -> IO ()) -> Pool Connection -> IO ()
+withConnection2 f pool = withResource pool $ \conn1 ->
+   withResource pool $ \conn2 -> f (conn1, conn2)
+
 runImplicitTransaction :: Pool Connection -> Session a -> IO a
 runImplicitTransaction pool action = do
   let wrappedAction = do

@@ -5,7 +5,6 @@ import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Data.ByteString (ByteString)
 import qualified Hasql.Queue.Internal as I
-import           Hasql.Session
 
 
 {-|Enqueue a payload.
@@ -32,7 +31,5 @@ dequeue :: ByteString
         -> IO [a]
 dequeue channel conn theDecoder batchCount =
   E.withDequeue channel conn theDecoder batchCount $ \c s -> flip I.runThrow c $ do
-    sql "BEGIN;"
     xs <- s
-    sql "END;"
     pure xs
