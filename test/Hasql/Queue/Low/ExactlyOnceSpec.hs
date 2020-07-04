@@ -13,7 +13,6 @@ import           System.Timeout
 import           Data.ByteString(ByteString)
 import           Control.Concurrent.Async
 import           Hasql.Queue.Internal (runThrow)
-import           Hasql.Connection
 import           Hasql.Session
 
 -- Fix this to be more of what I would expec
@@ -26,8 +25,8 @@ instance Exception TooManyRetries
 channel :: ByteString
 channel = "channel"
 
-runSession :: Connection -> Session [a] -> IO [a]
-runSession conn sess = runThrow sess conn
+runSession :: Session [a] -> Session [a]
+runSession = id
 
 spec :: Spec
 spec = describe "Hasql.Queue.High.ExactlyOnce" $ parallel $ do

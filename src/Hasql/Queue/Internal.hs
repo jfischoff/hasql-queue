@@ -213,20 +213,29 @@ instance Semigroup WithNotifyHandlers where
 instance Monoid WithNotifyHandlers where
   mempty = WithNotifyHandlers mempty mempty
 
-withNotifyWith :: WithNotifyHandlers -> ByteString -> Connection -> Session a -> (a -> Maybe b) -> IO b
-withNotifyWith WithNotifyHandlers {..} channel conn action theCast = bracket_
+data NoRows = NoRows
+  deriving (Show, Eq, Typeable)
+
+instance Exception NoRows
+
+withNotifyWith :: WithNotifyHandlers
+               -> ByteString
+               -> Connection
+               -> Session a
+               -> IO a
+withNotifyWith WithNotifyHandlers {..} channel conn action = bracket_
   (execute conn $ "LISTEN " <> channel)
   (execute conn $ "UNLISTEN " <> channel)
   $ fix $ \restart -> do
-    x <- runThrow action conn
+    x <- try $ runThrow action conn
     withNotifyHandlersAfterAction
-    case theCast x of
-      Nothing -> do
+    case x of
+      Left NoRows  -> do
         -- TODO record the time here
         withNotifyHandlersBeforeNotification
         notifyPayload channel conn
         restart
-      Just xs -> pure xs
+      Right xs -> pure xs
 
 fst3 :: (a, b, c) -> a
 fst3 (x, _, _) = x

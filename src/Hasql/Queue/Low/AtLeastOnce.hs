@@ -13,7 +13,7 @@ module Hasql.Queue.Low.AtLeastOnce
   , I.WithNotifyHandlers (..)
   ) where
 
-import qualified Hasql.Queue.Low.ExactlyOnce as S
+import qualified Hasql.Queue.Low.ExactlyOnce as E
 import qualified Hasql.Queue.Internal as I
 import           Hasql.Connection
 import qualified Hasql.Encoders as E
@@ -21,6 +21,7 @@ import qualified Hasql.Decoders as D
 import           Control.Exception
 import           Data.Function
 import           Data.ByteString (ByteString)
+import           Control.Monad.IO.Class
 
 {-|Enqueue a payload.
 -}
@@ -33,7 +34,7 @@ enqueue :: ByteString
         -> [a]
         -- ^ List of payloads to enqueue
         -> IO ()
-enqueue channel conn encoder xs = I.runThrow (S.enqueue channel encoder xs) conn
+enqueue channel conn encoder xs = I.runThrow (E.enqueue channel encoder xs) conn
 
 {-|
 Wait for the next payload and process it. If the continuation throws an
@@ -90,7 +91,7 @@ can specify the
 withDequeueWith :: forall e a b
                  . Exception e
                 => I.WithNotifyHandlers
-                -- Event handlers for events that occur as 'withDequeWith' loops
+                -- ^ Event handlers for events that occur as 'withDequeWith' loops
                 -> ByteString
                 -- ^ Notification channel name. Any valid PostgreSQL identifier
                 -> Connection
@@ -105,7 +106,11 @@ withDequeueWith :: forall e a b
                 -- ^ Continuation
                 -> IO b
 withDequeueWith withNotifyHandlers channel conn decoder retryCount count f = (fix $ \restart i -> do
-    try (I.withNotifyWith withNotifyHandlers channel conn (I.withDequeue decoder retryCount count f) id) >>= \case
+    let action = I.withDequeue decoder retryCount count f >>= \case
+          Nothing -> liftIO $ throwIO I.NoRows
+          Just x  -> pure x
+
+    try (I.withNotifyWith withNotifyHandlers channel conn action) >>= \case
       Right x -> pure x
       Left (e :: e) ->
         if i < retryCount then

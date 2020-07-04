@@ -30,6 +30,4 @@ dequeue :: ByteString
         -- ^ Element count
         -> IO [a]
 dequeue channel conn theDecoder batchCount =
-  E.withDequeue channel conn theDecoder batchCount $ \c s -> flip I.runThrow c $ do
-    xs <- s
-    pure xs
+  E.withDequeue channel conn theDecoder batchCount id
