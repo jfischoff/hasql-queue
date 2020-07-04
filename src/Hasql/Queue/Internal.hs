@@ -12,9 +12,10 @@ import           Data.String.Here.Uninterpolated
 import           Hasql.Statement
 import           Data.ByteString (ByteString)
 import           Control.Exception
-import           Control.Monad.IO.Class
 import           Data.Typeable
 import qualified Database.PostgreSQL.LibPQ as PQ
+import           Data.Maybe
+import           Control.Monad.IO.Class
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -173,23 +174,7 @@ incrementAttempts retryCount pids = do
 
   statement (fromIntegral retryCount, pids) theStatement
 
--- | Dequeue and
---   Move to Internal
--- This should use bracketOnError
-withDequeue :: D.Value a -> Int -> Int -> ([a] -> IO b) -> Session (Maybe b)
-withDequeue decoder retryCount count f = do
-  sql "BEGIN;SAVEPOINT temp"
-  dequeuePayload decoder count >>= \case
-    [] ->  Nothing <$ sql "COMMIT"
-    xs -> fmap Just $ do
-      liftIO (try $ f $ fmap pValue xs) >>= \case
-        Left  (e :: SomeException) -> do
-           sql "ROLLBACK TO SAVEPOINT temp; RELEASE SAVEPOINT temp"
-           let pids = fmap pId xs
-           incrementAttempts retryCount pids
-           sql "COMMIT"
-           liftIO (throwIO e)
-        Right x ->  x <$ sql "COMMIT"
+
 
 -- TODO remove
 newtype QueryException = QueryException QueryError
@@ -228,17 +213,106 @@ instance Semigroup WithNotifyHandlers where
 instance Monoid WithNotifyHandlers where
   mempty = WithNotifyHandlers mempty mempty
 
-withNotifyWith :: WithNotifyHandlers -> ByteString -> Connection -> Session a -> (a -> Maybe b) -> IO b
-withNotifyWith WithNotifyHandlers {..} channel conn action theCast = bracket_
+data NoRows = NoRows
+  deriving (Show, Eq, Typeable)
+
+instance Exception NoRows
+
+withNotifyWith :: WithNotifyHandlers
+               -> ByteString
+               -> Connection
+               -> Session a
+               -> IO a
+withNotifyWith WithNotifyHandlers {..} channel conn action = bracket_
   (execute conn $ "LISTEN " <> channel)
   (execute conn $ "UNLISTEN " <> channel)
   $ fix $ \restart -> do
-    x <- runThrow action conn
+    x <- try $ runThrow action conn
     withNotifyHandlersAfterAction
-    case theCast x of
-      Nothing -> do
+    case x of
+      Left NoRows  -> do
         -- TODO record the time here
         withNotifyHandlersBeforeNotification
         notifyPayload channel conn
         restart
-      Just xs -> pure xs
+      Right xs -> pure xs
+
+fst3 :: (a, b, c) -> a
+fst3 (x, _, _) = x
+
+snd3 :: (a, b, c) -> b
+snd3 (_, x, _) = x
+
+trd3 :: (a, b, c) -> c
+trd3 (_, _, x) = x
+
+listState :: State -> D.Value a -> Maybe PayloadId -> Int -> Session [(PayloadId, a)]
+listState theState valueDecoder mPayloadId count = do
+  let theQuery = [here|
+        SELECT id, value
+        FROM payloads
+        WHERE state = ($1 :: state_t)
+          AND id > $2
+        ORDER BY id ASC
+        LIMIT $3
+        |]
+      encoder = (fst3 >$< E.param (E.nonNullable stateEncoder))
+             <> (snd3 >$< E.param (E.nonNullable payloadIdEncoder))
+             <> (trd3 >$< E.param (E.nonNullable E.int4))
+
+      decoder =  D.rowList
+              $  (,)
+             <$> D.column (D.nonNullable payloadIdDecoder)
+             <*> D.column (D.nonNullable valueDecoder)
+      theStatement = Statement theQuery encoder decoder True
+
+      defaultPayloadId = fromMaybe initialPayloadId mPayloadId
+
+  statement (theState, defaultPayloadId, fromIntegral count) theStatement
+{-|
+Retrieve the payloads that have entered a failed state. See 'withDequeue' for how that
+occurs. The function returns a list of values and an id. The id is used the starting
+place for the next batch of values. If 'Nothing' is passed the list starts at the
+beginning.
+-}
+failures :: D.Value a
+         -- ^ Payload decoder
+         -> Maybe PayloadId
+         -- ^ Starting position of payloads. Pass 'Nothing' to
+         --   start at the beginning
+         -> Int
+         -- ^ Count
+         -> Session [(PayloadId, a)]
+failures = listState Failed
+
+-- Move to Internal
+-- This should use bracketOnError
+withDequeue :: D.Value a -> Int -> Int -> ([a] -> IO b) -> Session (Maybe b)
+withDequeue decoder retryCount count f = do
+  -- TODO turn to a save point
+  sql "BEGIN;SAVEPOINT temp"
+  dequeuePayload decoder count >>= \case
+    [] ->  Nothing <$ sql "COMMIT"
+    xs -> fmap Just $ do
+      liftIO (try $ f $ fmap pValue xs) >>= \case
+        Left  (e :: SomeException) -> do
+           sql "ROLLBACK TO SAVEPOINT temp; RELEASE SAVEPOINT temp"
+           let pids = fmap pId xs
+           incrementAttempts retryCount pids
+           sql "COMMIT"
+           liftIO (throwIO e)
+        Right x ->  x <$ sql "COMMIT"
+
+delete :: [PayloadId] -> Session ()
+delete xs = do
+  let theQuery = [here|
+        DELETE FROM payloads
+        WHERE id = ANY($1)
+        |]
+
+      encoder = E.param
+              $ E.nonNullable
+              $ E.foldableArray
+              $ E.nonNullable payloadIdEncoder
+
+  statement xs $ Statement theQuery encoder D.noResult True

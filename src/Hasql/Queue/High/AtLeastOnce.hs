@@ -1,39 +1,22 @@
-{-|
-IO based API for a PostgreSQL backed queue. The API utilizes PostgreSQL
-notifications.
--}
-module Hasql.Queue.IO
-  ( enqueue
-  , withDequeue
-  -- ** Listing API
-  , I.PayloadId
-  , failed
-  -- ** Advanced API
-  , withDequeueWith
-  , I.WithNotifyHandlers (..)
-  ) where
-
-import qualified Hasql.Queue.Session as S
+module Hasql.Queue.High.AtLeastOnce where
+import qualified Hasql.Queue.High.ExactlyOnce as H
 import qualified Hasql.Queue.Internal as I
 import           Hasql.Connection
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Control.Exception
 import           Data.Function
-import           Data.ByteString (ByteString)
 
 {-|Enqueue a payload.
 -}
-enqueue :: ByteString
-        -- ^ Notification channel name. Any valid PostgreSQL identifier
-        -> Connection
+enqueue :: Connection
         -- ^ Connection
         -> E.Value a
         -- ^ Payload encoder
         -> [a]
         -- ^ List of payloads to enqueue
         -> IO ()
-enqueue channel conn encoder xs = I.runThrow (S.enqueueNotify channel encoder xs) conn
+enqueue conn encoder xs = I.runThrow (H.enqueue encoder xs) conn
 
 {-|
 Wait for the next payload and process it. If the continuation throws an
@@ -46,9 +29,7 @@ to receive the list of failed payloads.
 If the queue is empty 'withDequeue' will block until it recieves a notification
 from the PostgreSQL server.
 -}
-withDequeue :: ByteString
-            -- ^ Notification channel name. Any valid PostgreSQL identifier
-            -> Connection
+withDequeue :: Connection
             -- ^ Connection
             -> D.Value a
             -- ^ Payload decoder
@@ -58,8 +39,9 @@ withDequeue :: ByteString
             -- ^ Element count
             -> ([a] -> IO b)
             -- ^ Continuation
-            -> IO b
-withDequeue = withDequeueWith @IOError mempty
+            -> IO (Maybe b)
+withDequeue = withDequeueWith @IOError
+
 
 {-|
 Retrieve the payloads that have entered a failed state. See 'withDequeue' for how that
@@ -67,16 +49,21 @@ occurs. The function returns a list of values and an id. The id is used the star
 place for the next batch of values. If 'Nothing' is passed the list starts at the
 beginning.
 -}
-failed :: Connection
-       -> D.Value a
-       -- ^ Payload decoder
-       -> Maybe I.PayloadId
-       -- ^ Starting position of payloads. Pass 'Nothing' to
-       --   start at the beginning
-       -> Int
-       -- ^ Count
-       -> IO (I.PayloadId, [a])
-failed conn decoder mPayload count = I.runThrow (S.failed decoder mPayload count) conn
+failures :: Connection
+         -> D.Value a
+         -- ^ Payload decoder
+         -> Maybe I.PayloadId
+         -- ^ Starting position of payloads. Pass 'Nothing' to
+         --   start at the beginning
+         -> Int
+         -- ^ Count
+         -> IO [(I.PayloadId, a)]
+failures conn decoder mPayload count = I.runThrow (I.failures decoder mPayload count) conn
+
+delete :: Connection
+       -> [I.PayloadId]
+       -> IO ()
+delete conn xs = I.runThrow (I.delete xs) conn
 
 {-|
 A more general configurable version of 'withDequeue'. Unlike 'withDequeue' one
@@ -84,11 +71,7 @@ can specify the
 -}
 withDequeueWith :: forall e a b
                  . Exception e
-                => I.WithNotifyHandlers
-                -- Event handlers for events that occur as 'withDequeWith' loops
-                -> ByteString
-                -- ^ Notification channel name. Any valid PostgreSQL identifier
-                -> Connection
+                => Connection
                 -- ^ Connection
                 -> D.Value a
                 -- ^ Payload decoder
@@ -98,9 +81,9 @@ withDequeueWith :: forall e a b
                 -- ^ Element count
                 -> ([a] -> IO b)
                 -- ^ Continuation
-                -> IO b
-withDequeueWith withNotifyHandlers channel conn decoder retryCount count f = (fix $ \restart i -> do
-    try (I.withNotifyWith withNotifyHandlers channel conn (I.withDequeue decoder retryCount count f) id) >>= \case
+                -> IO (Maybe b)
+withDequeueWith conn decoder retryCount count f = (fix $ \restart i -> do
+    try (flip I.runThrow conn $ I.withDequeue decoder retryCount count f) >>= \case
       Right x -> pure x
       Left (e :: e) ->
         if i < retryCount then

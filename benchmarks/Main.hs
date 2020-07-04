@@ -17,8 +17,8 @@ import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Hasql.Statement
 import qualified Hasql.Queue.Internal as I
-import qualified Hasql.Queue.IO as IO
-import qualified Hasql.Queue.Session as S
+import qualified Hasql.Queue.Low.AtLeastOnce as IO
+import qualified Hasql.Queue.High.ExactlyOnce as S
 import           Data.Int
 
 -- TODO need to make sure the number of producers and consumers does not go over the number of connections

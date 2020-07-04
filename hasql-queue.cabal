@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9319fa6761fe76cc51bd10b24cb1080b5273a6f222a31978d94ebeda853dac94
+-- hash: 844f7a7f17a717a732e845d72a3c0b5eca4a5f98bfb3a0c6d24ce8656325dc88
 
 name:           hasql-queue
 version:        1.0.1.1
@@ -30,10 +30,14 @@ source-repository head
 
 library
   exposed-modules:
+      Hasql.Queue.High.AtLeastOnce
+      Hasql.Queue.High.AtMostOnce
+      Hasql.Queue.High.ExactlyOnce
       Hasql.Queue.Internal
-      Hasql.Queue.IO
+      Hasql.Queue.Low.AtLeastOnce
+      Hasql.Queue.Low.AtMostOnce
+      Hasql.Queue.Low.ExactlyOnce
       Hasql.Queue.Migrate
-      Hasql.Queue.Session
   other-modules:
       Paths_hasql_queue
   hs-source-dirs:
@@ -122,8 +126,14 @@ test-suite unit-tests
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
-      Database.Hasql.Queue.IOSpec
-      Database.Hasql.Queue.SessionSpec
+      Hasql.Queue.High.AtLeastOnceSpec
+      Hasql.Queue.High.AtMostOnceSpec
+      Hasql.Queue.High.ExactlyOnceSpec
+      Hasql.Queue.Low.AtLeastOnceSpec
+      Hasql.Queue.Low.AtMostOnceSpec
+      Hasql.Queue.Low.ExactlyOnceSpec
+      Hasql.Queue.MigrateSpec
+      Hasql.Queue.TestUtils
       Paths_hasql_queue
   hs-source-dirs:
       test
