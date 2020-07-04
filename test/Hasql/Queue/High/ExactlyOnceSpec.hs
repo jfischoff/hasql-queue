@@ -2,16 +2,10 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 module Hasql.Queue.High.ExactlyOnceSpec where
-import           Hasql.Queue.Internal
-import           Control.Concurrent
 import           Control.Exception as E
-import           Control.Monad
 import           Hasql.Queue.High.ExactlyOnce
-import qualified Hasql.Queue.Low.ExactlyOnce as Low
 import           Test.Hspec                     (Spec, describe, parallel, it)
 import           Test.Hspec.Expectations.Lifted
-import           Control.Monad.Catch
-import           Control.Monad.IO.Class
 import           Test.Hspec.Core.Spec (sequential)
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
@@ -28,107 +22,26 @@ instance Exception TooManyRetries
 
 spec :: Spec
 spec = describe "Hasql.Queue.High.ExactlyOnce" $ parallel $ do
-  sequential $ aroundAll withSetup $ describe "basic" $ do
+  sequential $ aroundAll withSetup $ describe "enqueue/dequeue" $ do
+    it "enqueue nothing gives nothing" $ withReadCommitted $ do
+      enqueue E.int4 []
+      dequeue D.int4 1 `shouldReturn` []
 
-    it "empty locks nothing" $ \pool -> do
-      runReadCommitted pool (withDequeue D.int4 8 1 return) >>= \x ->
-        x `shouldBe` Nothing
-    it "empty gives count 0" $ \pool ->
-      runReadCommitted pool getCount `shouldReturn` 0
-{-
-    it "failed paging works" $ \pool -> do
-      runImplicitTransaction pool $ enqueue E.int4 [1,2,3,4]
+    it "enqueue 1 gives 1" $ withReadCommitted $ do
+      enqueue E.int4 [1]
+      dequeue D.int4 1 `shouldReturn` [1]
 
-      replicateM_ 8 $ E.handle (\(_ :: TooManyRetries) -> pure ()) $
-        runImplicitTransaction pool $ do
-          void $ withDequeue D.int4 1 1 $ const $
-            throwM $ TooManyRetries 1
+    it "dequeue give nothing after enqueueing everything" $ withReadCommitted $ do
+      dequeue D.int4 1 `shouldReturn` []
 
-      (a, b) <- runImplicitTransaction pool $ do
-        (next, xs) <- failed D.int4 Nothing 2
-        (_, ys) <- failed D.int4 (Just next) 2
+    it "dequeueing is in FIFO order" $ withReadCommitted $ do
+      enqueue E.int4 [1]
+      enqueue E.int4 [2]
+      dequeue D.int4 1 `shouldReturn` [1]
+      dequeue D.int4 1 `shouldReturn` [2]
 
-        pure (xs, ys)
+    it "dequeueing a batch of elements works" $ withReadCommitted $ do
+      enqueue E.int4 [1, 2, 3]
+      dequeue D.int4 2 `shouldReturn` [1, 2]
 
-      a `shouldBe` [1,2]
-      b `shouldBe` [3,4]
--}
-
-    it "enqueue/withDequeue" $ \pool -> do
-      (withDequeueResult, firstCount, secondCount) <- runReadCommitted pool $ do
-        Low.enqueue "hey" E.int4 [1]
-        firstCount <- getCount
-        withDequeueResult <- withDequeue D.int4 8 1 (`shouldBe` [1])
-
-        secondCount <- getCount
-        pure (withDequeueResult, firstCount, secondCount)
-
-      firstCount `shouldBe` 1
-      secondCount `shouldBe` 0
-      withDequeueResult `shouldBe` Just ()
-
-    it "enqueue/withDequeue/retries" $ \pool -> do
-      runImplicitTransaction pool $ enqueue E.int4 [1]
-
-      e <- E.try $ runImplicitTransaction pool $ do
-        theCount <- getCount
-
-        void $ withDequeue D.int4 8 1 $ const $
-            throwM $ TooManyRetries theCount
-
-      (e :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
-
-      runImplicitTransaction pool (dequeuePayload D.int4 1) >>= \[(Payload {..})] -> do
-        pAttempts `shouldBe` 1
-        pValue `shouldBe` 1
-
-      runImplicitTransaction pool $ enqueue E.int4 [1]
-
-      e1 <- E.try $ runImplicitTransaction pool $ do
-        theCount <- getCount
-
-        void $ withDequeue D.int4 8 1 $ const $
-            throwM $ TooManyRetries theCount
-
-      (e1 :: Either TooManyRetries ()) `shouldBe` Left (TooManyRetries 1)
-
-      replicateM_ 6 $ E.handle (\(_ :: TooManyRetries) -> pure ()) $ runImplicitTransaction pool $ do
-          void $ withDequeue D.int4 8 1 $ const $
-            throwM $ TooManyRetries 1
-
-      runImplicitTransaction pool (dequeuePayload D.int4 1) >>= \[(Payload {..})] -> do
-        pAttempts `shouldBe` 7
-        pValue `shouldBe` 1
-
-    it "enqueue/withDequeue/timesout" $ \pool -> do
-      e <- E.try $ runReadCommitted pool $ do
-        enqueue E.int4 [1]
-        firstCount <- getCount
-
-        void $ withDequeue D.int4 0 1 $ const $
-            throwM $ TooManyRetries firstCount
-
-      (e :: Either TooManyRetries ())`shouldBe` Left (TooManyRetries 1)
-
-      runReadCommitted pool getCount `shouldReturn` 0
-
-    it "selects the oldest first" $ \pool -> do
-      (firstCount, firstwithDequeueResult, secondwithDequeueResult, secondCount) <- runReadCommitted pool $ do
-        enqueue E.int4 [1]
-        liftIO $ threadDelay 100
-
-        enqueue E.int4 [2]
-
-        firstCount <- getCount
-
-        firstwithDequeueResult   <- withDequeue D.int4 8 1 (`shouldBe` [1])
-        secondwithDequeueResult <- withDequeue D.int4 8 1 (`shouldBe` [2])
-
-        secondCount <- getCount
-        pure (firstCount, firstwithDequeueResult, secondwithDequeueResult, secondCount)
-
-      firstCount `shouldBe` 2
-      firstwithDequeueResult `shouldBe` Just ()
-
-      secondCount `shouldBe` 0
-      secondwithDequeueResult `shouldBe` Just ()
+      dequeue D.int4 2 `shouldReturn` [3]

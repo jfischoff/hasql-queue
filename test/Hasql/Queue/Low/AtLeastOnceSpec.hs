@@ -34,12 +34,6 @@ getPayload conn decoder payloadId = I.runThrow (I.getPayload decoder payloadId) 
 channel :: ByteString
 channel = "hey"
 
-{-
-runNoTransaction :: Pool Connection -> Session a -> IO a
-runNoTransaction pool session = withResource pool $ \conn ->
-  either (throwIO . userError . show) pure =<< run action conn
--}
-
 data FailedwithDequeue = FailedwithDequeue
   deriving (Show, Eq, Typeable)
 
