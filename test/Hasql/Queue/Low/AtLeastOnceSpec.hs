@@ -24,6 +24,7 @@ import           Data.Typeable
 import qualified Hasql.Queue.Internal as I
 import           Hasql.Queue.Internal (Payload (..))
 import           Hasql.Queue.TestUtils
+import           System.Timeout
 
 getCount :: Connection -> IO Int64
 getCount = I.runThrow I.getCount
@@ -40,37 +41,61 @@ data FailedwithDequeue = FailedwithDequeue
 instance Exception FailedwithDequeue
 
 spec :: Spec
-spec = describe "Hasql.Queue.Low.AtLeastOnce" $ aroundAll withSetup $ describe "basic" $ do
+spec = describe "Hasql.Queue.Low.AtLeastOnce" $ aroundAll withSetup $ describe "enqueue/withDequeue" $ do
+  it "enqueue nothing timesout" $ withConnection $ \conn -> do
+    enqueue channel conn E.int4 []
+    timeout 100000 (withDequeue channel conn D.int4 1 1 pure) `shouldReturn` Nothing
+
+  it "enqueue 1 gives 1" $ withConnection $ \conn -> do
+    enqueue channel conn E.int4 [1]
+    withDequeue channel conn D.int4 1 1 pure `shouldReturn` [1]
+
+  it "dequeue timesout after enqueueing everything" $ withConnection $ \conn -> do
+    timeout 100000 (withDequeue channel conn D.int4 1 1 pure) `shouldReturn` Nothing
+
+  it "dequeueing is in FIFO order" $ withConnection $ \conn -> do
+    enqueue channel conn E.int4 [1]
+    enqueue channel conn E.int4 [2]
+    withDequeue channel conn D.int4 1 1 pure `shouldReturn` [1]
+    withDequeue channel conn D.int4 1 1 pure `shouldReturn` [2]
+
+  it "dequeueing a batch of elements works" $ withConnection $ \conn -> do
+    enqueue channel conn E.int4 [1, 2, 3]
+    withDequeue channel conn D.int4 1 2 pure `shouldReturn` [1, 2]
+
+    withDequeue channel conn D.int4 1 1 pure `shouldReturn` [3]
+
   it "withDequeue blocks until something is enqueued: before" $ withConnection $ \conn -> do
     void $ enqueue channel conn E.int4 [1]
-    res <- withDequeueWith @IOException mempty channel conn D.int4 1 1 pure
+    res <- withDequeue channel conn D.int4 1 1 pure
     res `shouldBe` [1]
-    getCount conn `shouldReturn` 0
 
   it "withDequeue blocks until something is enqueued: during" $ withConnection $ \conn -> do
     afterActionMVar  <- newEmptyMVar
     beforeNotifyMVar <- newEmptyMVar
 
-    let handlers = WithNotifyHandlers
-          { withNotifyHandlersAfterAction = putMVar afterActionMVar ()
-          , withNotifyHandlersBeforeNotification      = takeMVar beforeNotifyMVar
+    let handlers = I.WithNotifyHandlers
+          { withNotifyHandlersAfterAction        = putMVar afterActionMVar ()
+          , withNotifyHandlersBeforeNotification = takeMVar beforeNotifyMVar
           }
 
     -- This is the definition of IO.dequeue
-    resultThread <- async $ withDequeueWith @IOException handlers channel conn D.int4 1 1 pure
+    resultThread <- async $ withDequeueWith @IOError handlers channel conn D.int4 1 1 pure
     takeMVar afterActionMVar
 
-    void $ enqueue "hey" conn E.int4 [1]
+    void $ enqueue "hey"  conn E.int4 [1]
 
     putMVar beforeNotifyMVar ()
 
     wait resultThread `shouldReturn` [1]
 
-  it "withDequeue blocks until something is enqueued: after" $ withConnection $ \conn -> do
-    resultThread <- async $ withDequeueWith @IOException mempty channel conn D.int4 1 1 pure
-    void $ enqueue channel conn E.int4 [1]
+  it "withDequeue blocks until something is enqueued: after" $ withConnection2 $ \(conn1, conn2) -> do
+    thread <- async $ withDequeue channel conn1 D.int4 1 1 pure
+    timeout 100000 (wait thread) `shouldReturn` Nothing
 
-    wait resultThread `shouldReturn` [1]
+    enqueue channel conn2 E.int4 [1]
+
+    wait thread `shouldReturn` [1]
 
   -- TODO redo just using failures
   it "withDequeue fails and sets the retries to +1" $ withConnection $ \conn -> do
