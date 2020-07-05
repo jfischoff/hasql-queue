@@ -16,6 +16,8 @@ import           Data.Typeable
 import qualified Database.PostgreSQL.LibPQ as PQ
 import           Data.Maybe
 import           Control.Monad.IO.Class
+import qualified Data.Text.Encoding as TE
+import           Data.Text (Text)
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -316,3 +318,15 @@ delete xs = do
               $ E.nonNullable payloadIdEncoder
 
   statement xs $ Statement theQuery encoder D.noResult True
+
+withSchema :: Text -> Session a -> Session a
+withSchema schemaName action = do
+  -- TODO get the current search path
+  let decoder = D.singleRow $ D.column $ D.nonNullable D.text
+  oldSchemaName <- statement ()
+                 $ Statement "show search_path" mempty decoder True
+
+  sql (TE.encodeUtf8 $ "set search_path to '" <> schemaName <> "'")
+  r <- action
+  sql (TE.encodeUtf8 $ "set search_path to '" <> oldSchemaName <> "'")
+  pure r
