@@ -17,7 +17,7 @@ enqueue :: Connection
 enqueue conn encoder xs = I.runThrow (H.enqueue encoder xs) conn
 
 {-|
-Dequeue a list of payloads
+Dequeue a list of payloads.
 -}
 dequeue :: Connection
         -- ^ Connection

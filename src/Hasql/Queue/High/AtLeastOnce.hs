@@ -7,7 +7,7 @@ import qualified Hasql.Decoders as D
 import           Control.Exception
 import           Data.Function
 
-{-|Enqueue a payload.
+{-|Enqueue a list of payloads.
 -}
 enqueue :: Connection
         -- ^ Connection
@@ -60,6 +60,10 @@ failures :: Connection
          -> IO [(I.PayloadId, a)]
 failures conn decoder mPayload count = I.runThrow (I.failures decoder mPayload count) conn
 
+
+{-|
+Permantently remove a failed payload.
+-}
 delete :: Connection
        -> [I.PayloadId]
        -> IO ()
@@ -67,7 +71,9 @@ delete conn xs = I.runThrow (I.delete xs) conn
 
 {-|
 A more general configurable version of 'withDequeue'. Unlike 'withDequeue' one
-can specify the
+can specify the exception that causes a retry. Additionally event
+handlers can be specified to observe the internal behavior of the
+retry loop.
 -}
 withDequeueWith :: forall e a b
                  . Exception e

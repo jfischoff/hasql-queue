@@ -23,7 +23,7 @@ import           Data.Function
 import           Data.Text (Text)
 import           Control.Monad.IO.Class
 
-{-|Enqueue a payload.
+{-|Enqueue a list of payloads.
 -}
 enqueue :: Text
         -- ^ Notification channel name. Any valid PostgreSQL identifier
@@ -79,6 +79,9 @@ failures :: Connection
          -> IO [(I.PayloadId, a)]
 failures conn decoder mPayload count = I.runThrow (I.failures decoder mPayload count) conn
 
+{-|
+Permantently remove a failed payload.
+-}
 delete :: Connection
        -> [I.PayloadId]
        -> IO ()
