@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.2.
+-- This file has been generated from package.yaml by hpack version 0.33.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 844f7a7f17a717a732e845d72a3c0b5eca4a5f98bfb3a0c6d24ce8656325dc88
+-- hash: b579695b0e65a5f6e7b7b16fe3141c44f8fdaad8701dc9b27d64b422915b51ee
 
 name:           hasql-queue
 version:        1.0.1.1
@@ -68,7 +68,7 @@ executable benchmark
   hs-source-dirs:
       benchmarks
   default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
-  ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N -g2
+  ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
     , async
