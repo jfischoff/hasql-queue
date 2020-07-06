@@ -69,6 +69,25 @@ migrationQueryString valueType = [i|
 
  @
  DO $$
+  CREATE OR REPLACE FUNCTION notify_on(channel text) RETURNs VOID AS $$
+    BEGIN
+      EXECUTE (format(E'NOTIFY %I', channel));
+    END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE FUNCTION listen_on(channel text) RETURNS VOID AS $$
+    BEGIN
+      EXECUTE (format(E'LISTEN %I', channel));
+    END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE FUNCTION unlisten_on(channel text) RETURNS VOID AS $$
+    BEGIN
+      EXECUTE (format(E'UNLISTEN %I', channel));
+    END;
+  $$ LANGUAGE plpgsql;
+
+    DO $$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'state_t') THEN
       CREATE TYPE state_t AS ENUM ('enqueued', 'failed');
@@ -99,7 +118,7 @@ migrate conn valueType =
   I.runThrow (sql $ fromString $ migrationQueryString valueType) conn
 
 {-|
-
+Drop everything created by 'migrate'
 -}
 teardown :: Connection -> IO ()
 teardown conn = do

@@ -20,6 +20,9 @@ enqueue :: Text
         -> IO ()
 enqueue channel conn encoder xs = I.runThrow (E.enqueue channel encoder xs) conn
 
+{-|
+Dequeue a list of payloads
+-}
 dequeue :: Text
         -- ^ Notification channel name. Any valid PostgreSQL identifier
         -> Connection

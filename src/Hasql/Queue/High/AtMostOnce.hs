@@ -5,6 +5,8 @@ import           Hasql.Connection
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 
+{-|Enqueue a payload.
+-}
 enqueue :: Connection
         -- ^ Connection
         -> E.Value a
@@ -14,6 +16,9 @@ enqueue :: Connection
         -> IO ()
 enqueue conn encoder xs = I.runThrow (H.enqueue encoder xs) conn
 
+{-|
+Dequeue a list of payloads
+-}
 dequeue :: Connection
         -- ^ Connection
         -> D.Value a
