@@ -10,11 +10,11 @@ import           Data.Typeable
 import           Data.Int
 import           Hasql.Queue.TestUtils
 import           System.Timeout
-import           Data.ByteString(ByteString)
 import           Control.Concurrent.Async
 import           Hasql.Queue.Internal (runThrow)
 import           Control.Concurrent
 import           Control.Monad
+import           Data.Text (Text)
 
 -- Fix this to be more of what I would expec
 
@@ -23,7 +23,7 @@ newtype TooManyRetries = TooManyRetries Int64
 
 instance Exception TooManyRetries
 
-channel :: ByteString
+channel :: Text
 channel = "channel"
 
 spec :: Spec

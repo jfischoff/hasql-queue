@@ -24,6 +24,24 @@ migrationQueryString :: String
                      -- @jsonb@.
                      -> String
 migrationQueryString valueType = [i|
+  CREATE OR REPLACE FUNCTION notify_on(channel text) RETURNs VOID AS $$
+    BEGIN
+      EXECUTE (format(E'NOTIFY %I', channel));
+    END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE FUNCTION listen_on(channel text) RETURNS VOID AS $$
+    BEGIN
+      EXECUTE (format(E'LISTEN %I', channel));
+    END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE FUNCTION unlisten_on(channel text) RETURNS VOID AS $$
+    BEGIN
+      EXECUTE (format(E'UNLISTEN %I', channel));
+    END;
+  $$ LANGUAGE plpgsql;
+
     DO $$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'state_t') THEN
@@ -53,7 +71,7 @@ migrationQueryString valueType = [i|
  DO $$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'state_t') THEN
-      CREATE TYPE state_t AS ENUM ('enqueued', 'dequeued', 'failed');
+      CREATE TYPE state_t AS ENUM ('enqueued', 'failed');
     END IF;
   END$$;
 
@@ -64,10 +82,10 @@ migrationQueryString valueType = [i|
   , attempts int NOT NULL DEFAULT 0
   , state state_t NOT NULL DEFAULT 'enqueued'
   , modified_at int8 NOT NULL DEFAULT nextval('modified_index')
-  , value VALUE_TYPE NOT NULL
-  ) WITH (fillfactor = 50);
+  , value ${VALUE_TYPE} NOT NULL
+  );
 
-  CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at)
+  CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at, state)
     WHERE (state = 'enqueued');
  @
 

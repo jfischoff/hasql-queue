@@ -15,7 +15,7 @@ import           Hasql.Queue.Low.AtLeastOnce
 import           Test.Hspec                     (Spec, describe, it)
 import           Test.Hspec.Expectations.Lifted
 import           Data.List.Split
-import           Data.ByteString (ByteString)
+import           Data.Text(Text)
 import           Hasql.Connection
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
@@ -32,7 +32,7 @@ getCount = I.runThrow I.getCount
 getPayload :: Connection -> D.Value a -> I.PayloadId -> IO (Maybe (I.Payload a))
 getPayload conn decoder payloadId = I.runThrow (I.getPayload decoder payloadId) conn
 
-channel :: ByteString
+channel :: Text
 channel = "hey"
 
 data FailedwithDequeue = FailedwithDequeue

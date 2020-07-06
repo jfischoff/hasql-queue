@@ -5,18 +5,19 @@ module Hasql.Queue.Low.ExactlyOnce
   ) where
 import qualified Hasql.Queue.High.ExactlyOnce as H
 import Control.Exception
-import           Data.ByteString (ByteString)
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Hasql.Session
+import           Hasql.Statement
 import           Hasql.Connection
 import qualified Hasql.Queue.Internal as I
 import Control.Monad.IO.Class
+import           Data.Text(Text)
 
 {-|Enqueue a payload send a notification on the
 specified channel.
 -}
-enqueue :: ByteString
+enqueue :: Text
         -- ^ Notification channel name. Any valid PostgreSQL identifier
         -> E.Value a
         -- ^ Payload encoder
@@ -25,14 +26,14 @@ enqueue :: ByteString
         -> Session ()
 enqueue channel theEncoder values = do
   H.enqueue theEncoder values
-  sql $ "NOTIFY " <> channel
+  statement channel $ Statement "SELECT notify_on($1)" (E.param $ E.nonNullable E.text) D.noResult True
 
 dequeueOrRollbackAndThrow :: D.Value a -> Int -> Session [a]
 dequeueOrRollbackAndThrow theDecoder dequeueCount = H.dequeue theDecoder dequeueCount >>= \case
   [] -> liftIO $ throwIO I.NoRows
   xs -> pure xs
 
-withDequeue :: ByteString
+withDequeue :: Text
             -- ^ Notification channel name. Any valid PostgreSQL identifier
             -> Connection
             -- ^ Connection
@@ -47,7 +48,7 @@ withDequeue = withDequeueWith mempty
 
 withDequeueWith :: I.WithNotifyHandlers
                 -- ^ Event handlers for events that occur as 'withDequeWith' loops
-                -> ByteString
+                -> Text
                 -- ^ Notification channel name. Any valid PostgreSQL identifier
                 -> Connection
                 -- ^ Connection
