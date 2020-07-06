@@ -80,8 +80,8 @@ main = do
   flip finally printCounters $ withSetup microseconds (1 == durable) $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
     let enqueueAction = if notify > 0
-          then void $ withResource pool $ \conn -> IO.enqueue "channel" conn E.int4 (repeat enqueueBatchCount payload)
-          else void $ withResource pool $ \conn -> I.runThrow (S.enqueue E.int4 (repeat enqueueBatchCount payload) conn
+          then void $ withResource pool $ \conn -> IO.enqueue "channel" conn E.int4 (replicate enqueueBatchCount payload)
+          else void $ withResource pool $ \conn -> I.runThrow (S.enqueue E.int4 (replicate enqueueBatchCount payload)) conn
         dequeueAction = if notify > 0
           then void $ withResource pool $ \conn ->
             IO.withDequeue "channel" conn D.int4 1 dequeueBatchCount (const $ pure ())
