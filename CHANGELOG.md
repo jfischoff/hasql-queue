@@ -1,4 +1,7 @@
 Changelog for hasql-queue
+- 1.2.0.1
+  - Update README.md
+
 -1.2.0.0
   - Escape notification channel #100
   - Remove dequeued count from benchmarks #99
