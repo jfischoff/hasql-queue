@@ -38,10 +38,10 @@ enqueue channel conn encoder xs = I.runThrow (E.enqueue channel encoder xs) conn
 
 {-|
 Wait for the next payload and process it. If the continuation throws an
-exception the payloads are put back in the queue. An 'IOError' is caught
+exception the payloads are put back in the queue. 'IOError' is caught
 and 'withDequeue' will retry up to the retry count. If 'withDequeue' fails
 after too many retries the final exception is rethrown. If individual payloads are
-are attempted more than the retry count they are set as "failed". See 'failed'
+are attempted more than the retry count they are set as "failed". See 'failures'
 to receive the list of failed payloads.
 
 If the queue is empty 'withDequeue' will block until it recieves a notification
@@ -86,7 +86,9 @@ delete conn xs = I.runThrow (I.delete xs) conn
 
 {-|
 A more general configurable version of 'withDequeue'. Unlike 'withDequeue' one
-can specify the
+can specify the exception that causes a retry. Additionally event
+handlers can be specified to observe the internal behavior of the
+retry loop.
 -}
 withDequeueWith :: forall e a b
                  . Exception e

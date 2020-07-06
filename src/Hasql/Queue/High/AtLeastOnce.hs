@@ -20,14 +20,14 @@ enqueue conn encoder xs = I.runThrow (H.enqueue encoder xs) conn
 
 {-|
 Wait for the next payload and process it. If the continuation throws an
-exception the payloads are put back in the queue. An 'IOError' is caught
+exception the payloads are put back in the queue. 'IOError' is caught
 and 'withDequeue' will retry up to the retry count. If 'withDequeue' fails
 after too many retries the final exception is rethrown. If individual payloads are
-are attempted more than the retry count they are set as "failed". See 'failed'
+are attempted more than the retry count they are set as "failed". See 'failures'
 to receive the list of failed payloads.
 
-If the queue is empty 'withDequeue' will block until it recieves a notification
-from the PostgreSQL server.
+If the queue is empty 'withDequeue' return 'Nothing'. If there are
+any entries 'withDequeue' will wrap the list in 'Just'.
 -}
 withDequeue :: Connection
             -- ^ Connection

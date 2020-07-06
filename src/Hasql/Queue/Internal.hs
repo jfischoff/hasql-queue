@@ -1,3 +1,7 @@
+{-|
+Internal module. Changes to this modules are not reflected in the
+package version.
+-}
 module Hasql.Queue.Internal where
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
