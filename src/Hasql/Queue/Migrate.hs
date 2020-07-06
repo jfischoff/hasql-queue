@@ -98,12 +98,18 @@ migrate :: Connection
 migrate conn valueType =
   I.runThrow (sql $ fromString $ migrationQueryString valueType) conn
 
+{-|
+
+-}
 teardown :: Connection -> IO ()
 teardown conn = do
   let theQuery = [i|
         DROP TABLE IF EXISTS payloads;
         DROP TYPE IF EXISTS state_t;
         DROP SEQUENCE IF EXISTS modified_index;
+        DROP FUNCTION IF EXISTS notify_on;
+        DROP FUNCTION IF EXISTS listen_on;
+        DROP FUNCTION IF EXISTS unlisten_on;
       |]
 
   I.runThrow (sql theQuery) conn
