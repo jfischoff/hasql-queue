@@ -59,7 +59,7 @@ migrationQueryString valueType = [i|
   , value ${valueType} NOT NULL
   );
 
-  CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at, state)
+  CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at)
     WHERE (state = 'enqueued');
 
 |]

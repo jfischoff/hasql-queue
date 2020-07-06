@@ -1,4 +1,7 @@
 Changelog for hasql-queue
+- 1.2.0.2
+  - Better partial index #104
+
 - 1.2.0.1
   - Update README.md
 
