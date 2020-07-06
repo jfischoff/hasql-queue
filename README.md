@@ -9,7 +9,7 @@ Typically a producer would enqueue a new payload as part of larger database tran
 ```haskell
 createAccount userRecord = transaction Serializable Write $ do
   createUser userRecord
-  enqueueNotification "queue_channel" emailEncoder [makeVerificationEmail userRecord]
+  enqueue "queue_channel" emailEncoder [makeVerificationEmail userRecord]
 ```
 
 In another thread or process the consumer would drain the queue.
@@ -19,15 +19,4 @@ In another thread or process the consumer would drain the queue.
   -- up and marking the payload as failed.
   forever $ withDequeue "queue_channel" conn emailDecoder 5 1 $
     mapM_ sendEmail
-```
-
-In the example above we used the `Session` API for enqueuing and the `IO` for
-dequeuing.
-
-The `Session` API is useful for composing larger transactions and the `IO` utilizes PostgreSQL notifications to avoid polling.
-
-## Installation
-
-```bash
-stack install hasql-queue
 ```
