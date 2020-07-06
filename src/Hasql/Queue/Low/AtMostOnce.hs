@@ -3,13 +3,13 @@ import qualified Hasql.Queue.Low.ExactlyOnce as E
 import           Hasql.Connection
 import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
-import           Data.ByteString (ByteString)
+import           Data.Text(Text)
 import qualified Hasql.Queue.Internal as I
 
 
 {-|Enqueue a payload.
 -}
-enqueue :: ByteString
+enqueue :: Text
         -- ^ Notification channel name. Any valid PostgreSQL identifier
         -> Connection
         -- ^ Connection
@@ -20,7 +20,7 @@ enqueue :: ByteString
         -> IO ()
 enqueue channel conn encoder xs = I.runThrow (E.enqueue channel encoder xs) conn
 
-dequeue :: ByteString
+dequeue :: Text
         -- ^ Notification channel name. Any valid PostgreSQL identifier
         -> Connection
         -- ^ Connection

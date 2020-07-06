@@ -20,12 +20,12 @@ import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Control.Exception
 import           Data.Function
-import           Data.ByteString (ByteString)
+import           Data.Text (Text)
 import           Control.Monad.IO.Class
 
 {-|Enqueue a payload.
 -}
-enqueue :: ByteString
+enqueue :: Text
         -- ^ Notification channel name. Any valid PostgreSQL identifier
         -> Connection
         -- ^ Connection
@@ -47,7 +47,7 @@ to receive the list of failed payloads.
 If the queue is empty 'withDequeue' will block until it recieves a notification
 from the PostgreSQL server.
 -}
-withDequeue :: ByteString
+withDequeue :: Text
             -- ^ Notification channel name. Any valid PostgreSQL identifier
             -> Connection
             -- ^ Connection
@@ -92,7 +92,7 @@ withDequeueWith :: forall e a b
                  . Exception e
                 => I.WithNotifyHandlers
                 -- ^ Event handlers for events that occur as 'withDequeWith' loops
-                -> ByteString
+                -> Text
                 -- ^ Notification channel name. Any valid PostgreSQL identifier
                 -> Connection
                 -- ^ Connection

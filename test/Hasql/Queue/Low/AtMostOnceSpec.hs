@@ -6,11 +6,11 @@ import           Test.Hspec                     (Spec, describe, parallel, it)
 import           Test.Hspec.Expectations.Lifted
 import           Test.Hspec.Core.Spec (sequential)
 import           Hasql.Queue.TestUtils
-import           Data.ByteString(ByteString)
+import           Data.Text(Text)
 import           System.Timeout
 import           Control.Concurrent.Async
 
-channel :: ByteString
+channel :: Text
 channel = "channel"
 
 spec :: Spec

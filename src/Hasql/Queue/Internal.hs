@@ -16,6 +16,8 @@ import           Data.Typeable
 import qualified Database.PostgreSQL.LibPQ as PQ
 import           Data.Maybe
 import           Control.Monad.IO.Class
+import           Data.Text (Text)
+import qualified Data.Text.Encoding as TE
 
 -- | A 'Payload' can exist in three states in the queue, 'Enqueued',
 --   and 'Dequeued'. A 'Payload' starts in the 'Enqueued' state and is locked
@@ -219,13 +221,13 @@ data NoRows = NoRows
 instance Exception NoRows
 
 withNotifyWith :: WithNotifyHandlers
-               -> ByteString
+               -> Text
                -> Connection
                -> Session a
                -> IO a
 withNotifyWith WithNotifyHandlers {..} channel conn action = bracket_
-  (execute conn $ "LISTEN " <> channel)
-  (execute conn $ "UNLISTEN " <> channel)
+  (flip runThrow conn $ statement channel $ Statement "SELECT listen_on($1)" (E.param $ E.nonNullable E.text) D.noResult True)
+  (flip runThrow conn $ statement channel $ Statement "SELECT unlisten_on($1)" (E.param $ E.nonNullable E.text) D.noResult True)
   $ fix $ \restart -> do
     x <- try $ runThrow action conn
     withNotifyHandlersAfterAction
@@ -233,7 +235,7 @@ withNotifyWith WithNotifyHandlers {..} channel conn action = bracket_
       Left NoRows  -> do
         -- TODO record the time here
         withNotifyHandlersBeforeNotification
-        notifyPayload channel conn
+        notifyPayload (TE.encodeUtf8 channel) conn
         restart
       Right xs -> pure xs
 
