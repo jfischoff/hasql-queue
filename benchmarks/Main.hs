@@ -29,19 +29,26 @@ withConn db f = do
   let connStr = toConnectionString db
   bracket (either (throwIO . userError . show) pure =<< acquire connStr) release f
 
-withSetup :: (Pool Connection -> IO ()) -> IO ()
-withSetup f = do
+durableConfig :: Int -> Config
+durableConfig microseconds = defaultConfig <> mempty
+  { postgresConfigFile =
+      [ ("wal_level", "replica")
+      , ("archive_mode", "on")
+      , ("max_wal_senders", "2")
+      , ("fsync", "on")
+      , ("synchronous_commit", "on")
+      , ("commit_delay", show microseconds)
+      ]
+  }
+
+withSetup :: Int -> Bool -> (Pool Connection -> IO ()) -> IO ()
+withSetup microseconds durable f = do
   -- Helper to throw exceptions
   let throwE x = either throwIO pure =<< x
 
   throwE $ withDbCache $ \dbCache -> do
     -- let combinedConfig = autoExplainConfig 15 <> cacheConfig dbCache
-    let combinedConfig = defaultConfig <> cacheConfig dbCache <> mempty
-          { postgresConfigFile =
-              [ ("checkpoint_timeout", "60min")
-              , ("max_wal_size", "2GB")
-              ]
-          }
+    let combinedConfig = (if durable then durableConfig microseconds else defaultConfig) <> cacheConfig dbCache
     migratedConfig <- throwE $ cacheAction (("~/.tmp-postgres/" <>) . BSC.unpack . Base64.encode . hash
         $ BSC.pack $ migrationQueryString "int4")
         (flip withConn $ flip migrate "int4")
@@ -62,7 +69,7 @@ payload = 1
 
 main :: IO ()
 main = do
-  [producerCount, consumerCount, time, initialDequeueCount, initialEnqueueCount, batchCount, notify]
+  [producerCount, consumerCount, time, initialDequeueCount, initialEnqueueCount, batchCount, notify, durable, microseconds]
     <- map read <$> getArgs
   -- create a temporary database
   enqueueCounter <- newIORef (0 :: Int)
@@ -75,7 +82,7 @@ main = do
         putStrLn $ "Enqueue Count: " <> show finalEnqueueCount
         putStrLn $ "Dequeue Count: " <> show finalDequeueCount
 
-  flip finally printCounters $ withSetup $ \pool -> do
+  flip finally printCounters $ withSetup microseconds (1 == durable) $ \pool -> do
     -- enqueue the enqueueCount + dequeueCount
     let enqueueAction = if notify > 0
           then void $ withResource pool $ \conn -> IO.enqueue "channel" conn E.int4 [payload]
