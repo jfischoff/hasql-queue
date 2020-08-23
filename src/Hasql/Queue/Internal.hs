@@ -13,6 +13,7 @@ import           Hasql.Connection
 import           Data.Int
 import           Data.Functor.Contravariant
 import           Data.String.Here.Uninterpolated
+import           Data.String.Here.Interpolated
 import           Hasql.Statement
 import           Data.ByteString (ByteString)
 import           Control.Exception
@@ -102,28 +103,29 @@ enqueuePayload theEncoder values = do
 
   statement values theStatement
 
-dequeuePayload :: D.Value a -> Int -> Session [Payload a]
-dequeuePayload valueDecoder count = do
-  let multipleQuery = [here|
+dequeuePayload :: ByteString -> D.Value a -> Int -> Session [Payload a]
+dequeuePayload theFilter valueDecoder count = do
+  let multipleQuery = [i|
         DELETE FROM payloads
         WHERE id in
           ( SELECT p1.id
             FROM payloads AS p1
-            WHERE p1.state='enqueued'
+            WHERE p1.state='enqueued' ${theFilter}
             ORDER BY p1.modified_at ASC
             FOR UPDATE SKIP LOCKED
+
             LIMIT $1
           )
         RETURNING id, state, attempts, modified_at, value
       |]
       multipleEncoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
 
-      singleQuery = [here|
+      singleQuery = [i|
         DELETE FROM payloads
         WHERE id =
           ( SELECT p1.id
             FROM payloads AS p1
-            WHERE p1.state='enqueued'
+            WHERE p1.state='enqueued' ${theFilter}
             ORDER BY p1.modified_at ASC
             FOR UPDATE SKIP LOCKED
             LIMIT 1
@@ -293,11 +295,10 @@ failures = listState Failed
 
 -- Move to Internal
 -- This should use bracketOnError
-withDequeue :: D.Value a -> Int -> Int -> ([a] -> IO b) -> Session (Maybe b)
-withDequeue decoder retryCount count f = do
-  -- TODO turn to a save point
+withDequeue :: ByteString -> D.Value a -> Int -> Int -> ([a] -> IO b) -> Session (Maybe b)
+withDequeue theFilter decoder retryCount count f = do
   sql "BEGIN;SAVEPOINT temp"
-  dequeuePayload decoder count >>= \case
+  dequeuePayload theFilter decoder count >>= \case
     [] ->  Nothing <$ sql "COMMIT"
     xs -> fmap Just $ do
       liftIO (try $ f $ fmap pValue xs) >>= \case

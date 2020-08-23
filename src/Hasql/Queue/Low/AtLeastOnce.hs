@@ -22,6 +22,7 @@ import           Control.Exception
 import           Data.Function
 import           Data.Text (Text)
 import           Control.Monad.IO.Class
+import           Data.ByteString (ByteString)
 
 {-|Enqueue a list of payloads.
 -}
@@ -51,6 +52,8 @@ withDequeue :: Text
             -- ^ Notification channel name. Any valid PostgreSQL identifier
             -> Connection
             -- ^ Connection
+            -> ByteString
+            -- ^ Optional filter
             -> D.Value a
             -- ^ Payload decoder
             -> Int
@@ -101,6 +104,8 @@ withDequeueWith :: forall e a b
                 -- ^ Notification channel name. Any valid PostgreSQL identifier
                 -> Connection
                 -- ^ Connection
+                -> ByteString
+                -- ^ Optional filter
                 -> D.Value a
                 -- ^ Payload decoder
                 -> Int
@@ -110,8 +115,8 @@ withDequeueWith :: forall e a b
                 -> ([a] -> IO b)
                 -- ^ Continuation
                 -> IO b
-withDequeueWith withNotifyHandlers channel conn decoder retryCount count f = (fix $ \restart i -> do
-    let action = I.withDequeue decoder retryCount count f >>= \case
+withDequeueWith withNotifyHandlers channel conn theFilter decoder retryCount count f = (fix $ \restart i -> do
+    let action = I.withDequeue theFilter decoder retryCount count f >>= \case
           Nothing -> liftIO $ throwIO I.NoRows
           Just x  -> pure x
 

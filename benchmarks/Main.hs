@@ -84,7 +84,7 @@ main = do
           else void $ withResource pool $ \conn -> I.runThrow (S.enqueue E.int4 (replicate enqueueBatchCount payload)) conn
         dequeueAction = if notify > 0
           then void $ withResource pool $ \conn ->
-            IO.withDequeue "channel" conn D.int4 1 dequeueBatchCount (const $ pure ())
+            IO.withDequeue "channel" conn "" D.int4 1 dequeueBatchCount (const $ pure ())
           else void $ withResource pool $ \conn -> fix $ \next ->
             I.runThrow (S.dequeue D.int4 dequeueBatchCount) conn >>= \case
               [] -> next

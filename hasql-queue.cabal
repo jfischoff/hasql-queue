@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 956ae93525f9dafcc0c9c8149cd2bbc8cfcfe4e63310adec92ce40f995e4cbf4
+-- hash: 53732dee5cba530cd2bc93a536addc0db9e136ecebf54b707637daac0ec24a67
 
 name:           hasql-queue
-version:        1.2.0.1
+version:        1.2.0.2
 synopsis:       A PostgreSQL backed queue
 description:    A PostgreSQL backed queue. Please see README.md
 category:       Web
