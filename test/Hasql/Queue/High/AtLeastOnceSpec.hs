@@ -18,6 +18,19 @@ data FailedwithDequeue = FailedwithDequeue
 
 instance Exception FailedwithDequeue
 
+withDequeueNoFilter :: Connection
+                    -- ^ Connection
+                    -> D.Value a
+                    -- ^ Payload decoder
+                    -> Int
+                    -- ^ Retry count
+                    -> Int
+                    -- ^ Element count
+                    -> ([a] -> IO b)
+                    -- ^ Continuation
+                    -> IO (Maybe b)
+withDequeueNoFilter c = withDequeue c ""
+
 getPayload :: Connection -> D.Value a -> I.PayloadId -> IO (Maybe (I.Payload a))
 getPayload conn decoder payloadId = I.runThrow (I.getPayload decoder payloadId) conn
 
@@ -26,56 +39,56 @@ spec = describe "Hasql.Queue.High.AtLeastOnce" $ parallel $ do
   sequential $ aroundAll withSetup $ describe "enqueue/dequeue" $ do
     it "enqueue nothing gives nothing" $ withConnection $ \conn -> do
       enqueue conn E.int4 []
-      withDequeue conn D.int4 1 1 pure `shouldReturn` Nothing
+      withDequeueNoFilter conn D.int4 1 1 pure `shouldReturn` Nothing
 
     it "enqueue 1 gives 1" $ withConnection $ \conn -> do
       enqueue conn E.int4 [1]
-      withDequeue conn D.int4 1 1 pure `shouldReturn` Just [1]
+      withDequeueNoFilter conn D.int4 1 1 pure `shouldReturn` Just [1]
 
     it "dequeue give nothing after enqueueing everything" $ withConnection $ \conn -> do
-      withDequeue conn D.int4 1 1 pure `shouldReturn` Nothing
+      withDequeueNoFilter conn D.int4 1 1 pure `shouldReturn` Nothing
 
     it "dequeueing is in FIFO order" $ withConnection $ \conn -> do
       enqueue conn E.int4 [1]
       enqueue conn E.int4 [2]
-      withDequeue conn D.int4 1 1 pure `shouldReturn` Just [1]
-      withDequeue conn D.int4 1 1 pure `shouldReturn` Just [2]
+      withDequeueNoFilter conn D.int4 1 1 pure `shouldReturn` Just [1]
+      withDequeueNoFilter conn D.int4 1 1 pure `shouldReturn` Just [2]
 
     it "dequeueing a batch of elements works" $ withConnection $ \conn -> do
       enqueue conn E.int4 [1, 2, 3]
-      withDequeue conn D.int4 1 2 pure `shouldReturn` Just [1, 2]
+      withDequeueNoFilter conn D.int4 1 2 pure `shouldReturn` Just [1, 2]
 
-      withDequeue conn D.int4 1 2 pure `shouldReturn` Just [3]
+      withDequeueNoFilter conn D.int4 1 2 pure `shouldReturn` Just [3]
 
-    it "withDequeue fails if a non IOError is thrown" $ withConnection $ \conn -> do
+    it "withDequeueNoFilter fails if a non IOError is thrown" $ withConnection $ \conn -> do
       enqueue conn E.int4 [1]
       handle (\FailedwithDequeue -> pure Nothing) $
-        withDequeue conn D.int4 2 1 $ \_ -> throwIO FailedwithDequeue
+        withDequeueNoFilter conn D.int4 2 1 $ \_ -> throwIO FailedwithDequeue
 
       failures conn D.int4 Nothing 1 `shouldReturn` []
-      withDequeue conn D.int4 0 1 pure `shouldReturn` Just [1]
+      withDequeueNoFilter conn D.int4 0 1 pure `shouldReturn` Just [1]
 
-    it "withDequeue fails if throws occur and retry is zero" $ withConnection $ \conn -> do
+    it "withDequeueNoFilter fails if throws occur and retry is zero" $ withConnection $ \conn -> do
       enqueue conn E.int4 [1]
       handle (\(_ :: IOError) -> pure Nothing) $
-        withDequeue conn D.int4 0 1 $ \_ -> throwIO $ userError "hey"
+        withDequeueNoFilter conn D.int4 0 1 $ \_ -> throwIO $ userError "hey"
 
       [(pId, x)] <- failures conn D.int4 Nothing 1
       x `shouldBe` 1
       delete conn [pId]
 
-    it "withDequeue succeeds even if the first attempt fails" $ withConnection $ \conn -> do
+    it "withDequeueNoFilter succeeds even if the first attempt fails" $ withConnection $ \conn -> do
       enqueue conn E.int4 [1]
 
       ref <- newIORef (0 :: Int)
 
-      withDequeue conn D.int4 1 1 (\_ -> do
+      withDequeueNoFilter conn D.int4 1 1 (\_ -> do
         count <- readIORef ref
         writeIORef ref $ count + 1
         when (count < 1) $ throwIO $ userError "hey"
         pure '!') `shouldReturn` Just '!'
 
-      withDequeue conn D.int4 1 1 pure `shouldReturn` Nothing
+      withDequeueNoFilter conn D.int4 1 1 pure `shouldReturn` Nothing
       readIORef ref `shouldReturn` 2
 
     it "failures paging works" $ withConnection $ \conn -> do
@@ -83,9 +96,9 @@ spec = describe "Hasql.Queue.High.AtLeastOnce" $ parallel $ do
       enqueue conn E.int4 [3]
 
       handle (\(_ :: IOError) -> pure Nothing) $
-        withDequeue conn D.int4 0 1 $ \_ -> throwIO $ userError "fds"
+        withDequeueNoFilter conn D.int4 0 1 $ \_ -> throwIO $ userError "fds"
       handle (\(_ :: IOError) -> pure Nothing) $
-        withDequeue conn D.int4 0 1 $ \_ -> throwIO $ userError "fds"
+        withDequeueNoFilter conn D.int4 0 1 $ \_ -> throwIO $ userError "fds"
 
       [(next, x)] <- failures conn D.int4 Nothing 1
       x `shouldBe` 2

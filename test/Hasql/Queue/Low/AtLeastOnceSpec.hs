@@ -26,6 +26,21 @@ import           Hasql.Queue.Internal (Payload (..))
 import           Hasql.Queue.TestUtils
 import           System.Timeout
 
+withDequeueNoFilter :: Text
+                    -- ^ Notification channel name. Any valid PostgreSQL identifier
+                    -> Connection
+                    -- ^ Connection
+                    -> D.Value a
+                    -- ^ Payload decoder
+                    -> Int
+                    -- ^ Retry count
+                    -> Int
+                    -- ^ Element count
+                    -> ([a] -> IO b)
+                    -- ^ Continuation
+                    -> IO b
+withDequeueNoFilter t c = withDequeue t c ""
+
 getCount :: Connection -> IO Int64
 getCount = I.runThrow I.getCount
 
@@ -44,33 +59,33 @@ spec :: Spec
 spec = describe "Hasql.Queue.Low.AtLeastOnce" $ aroundAll withSetup $ describe "enqueue/withDequeue" $ do
   it "enqueue nothing timesout" $ withConnection $ \conn -> do
     enqueue channel conn E.int4 []
-    timeout 100000 (withDequeue channel conn D.int4 1 1 pure) `shouldReturn` Nothing
+    timeout 100000 (withDequeueNoFilter channel conn D.int4 1 1 pure) `shouldReturn` Nothing
 
   it "enqueue 1 gives 1" $ withConnection $ \conn -> do
     enqueue channel conn E.int4 [1]
-    withDequeue channel conn D.int4 1 1 pure `shouldReturn` [1]
+    withDequeueNoFilter channel conn D.int4 1 1 pure `shouldReturn` [1]
 
   it "dequeue timesout after enqueueing everything" $ withConnection $ \conn -> do
-    timeout 100000 (withDequeue channel conn D.int4 1 1 pure) `shouldReturn` Nothing
+    timeout 100000 (withDequeueNoFilter channel conn D.int4 1 1 pure) `shouldReturn` Nothing
 
   it "dequeueing is in FIFO order" $ withConnection $ \conn -> do
     enqueue channel conn E.int4 [1]
     enqueue channel conn E.int4 [2]
-    withDequeue channel conn D.int4 1 1 pure `shouldReturn` [1]
-    withDequeue channel conn D.int4 1 1 pure `shouldReturn` [2]
+    withDequeueNoFilter channel conn D.int4 1 1 pure `shouldReturn` [1]
+    withDequeueNoFilter channel conn D.int4 1 1 pure `shouldReturn` [2]
 
   it "dequeueing a batch of elements works" $ withConnection $ \conn -> do
     enqueue channel conn E.int4 [1, 2, 3]
-    withDequeue channel conn D.int4 1 2 pure `shouldReturn` [1, 2]
+    withDequeueNoFilter channel conn D.int4 1 2 pure `shouldReturn` [1, 2]
 
-    withDequeue channel conn D.int4 1 1 pure `shouldReturn` [3]
+    withDequeueNoFilter channel conn D.int4 1 1 pure `shouldReturn` [3]
 
-  it "withDequeue blocks until something is enqueued: before" $ withConnection $ \conn -> do
+  it "withDequeueNoFilter blocks until something is enqueued: before" $ withConnection $ \conn -> do
     void $ enqueue channel conn E.int4 [1]
-    res <- withDequeue channel conn D.int4 1 1 pure
+    res <- withDequeueNoFilter channel conn D.int4 1 1 pure
     res `shouldBe` [1]
 
-  it "withDequeue blocks until something is enqueued: during" $ withConnection $ \conn -> do
+  it "withDequeueNoFilter blocks until something is enqueued: during" $ withConnection $ \conn -> do
     afterActionMVar  <- newEmptyMVar
     beforeNotifyMVar <- newEmptyMVar
 
@@ -80,7 +95,7 @@ spec = describe "Hasql.Queue.Low.AtLeastOnce" $ aroundAll withSetup $ describe "
           }
 
     -- This is the definition of IO.dequeue
-    resultThread <- async $ withDequeueWith @IOError handlers channel conn D.int4 1 1 pure
+    resultThread <- async $ withDequeueWith @IOError handlers channel conn "" D.int4 1 1 pure
     takeMVar afterActionMVar
 
     void $ enqueue "hey"  conn E.int4 [1]
@@ -89,8 +104,8 @@ spec = describe "Hasql.Queue.Low.AtLeastOnce" $ aroundAll withSetup $ describe "
 
     wait resultThread `shouldReturn` [1]
 
-  it "withDequeue blocks until something is enqueued: after" $ withConnection2 $ \(conn1, conn2) -> do
-    thread <- async $ withDequeue channel conn1 D.int4 1 1 pure
+  it "withDequeueNoFilter blocks until something is enqueued: after" $ withConnection2 $ \(conn1, conn2) -> do
+    thread <- async $ withDequeueNoFilter channel conn1 D.int4 1 1 pure
     timeout 100000 (wait thread) `shouldReturn` Nothing
 
     enqueue channel conn2 E.int4 [1]
@@ -98,19 +113,19 @@ spec = describe "Hasql.Queue.Low.AtLeastOnce" $ aroundAll withSetup $ describe "
     wait thread `shouldReturn` [1]
 
   -- TODO redo just using failures
-  it "withDequeue fails and sets the retries to +1" $ withConnection $ \conn -> do
+  it "withDequeueNoFilter fails and sets the retries to +1" $ withConnection $ \conn -> do
     enqueue channel conn E.int4 [1]
-    handle (\(_ :: IOError) -> pure ()) $ withDequeue channel conn D.int4 0 1 $ \_ -> throwIO $ userError "hey"
+    handle (\(_ :: IOError) -> pure ()) $ withDequeueNoFilter channel conn D.int4 0 1 $ \_ -> throwIO $ userError "hey"
     xs <- failures conn D.int4 Nothing 1
 
     map snd xs `shouldBe` [1]
 
-  it "withDequeue succeeds even if the first attempt fails" $ withConnection $ \conn -> do
+  it "withDequeueNoFilter succeeds even if the first attempt fails" $ withConnection $ \conn -> do
     [payloadId] <- I.runThrow (I.enqueuePayload E.int4 [1]) conn
 
     ref <- newIORef (0 :: Int)
 
-    withDequeueWith @FailedwithDequeue mempty channel conn D.int4 1 1 (\_ -> do
+    withDequeueWith @FailedwithDequeue mempty channel conn "" D.int4 1 1 (\_ -> do
       count <- readIORef ref
       writeIORef ref $ count + 1
       when (count < 1) $ throwIO FailedwithDequeue
@@ -126,7 +141,7 @@ spec = describe "Hasql.Queue.Low.AtLeastOnce" $ aroundAll withSetup $ describe "
     ref <- newTVarIO []
 
     loopThreads <- replicateM 35 $ async $ withPool' $ \c -> fix $ \next -> do
-      lastCount <- withDequeue channel c D.int4 1 1 $ \[x] -> do
+      lastCount <- withDequeueNoFilter channel c D.int4 1 1 $ \[x] -> do
         atomically $ do
           xs <- readTVar ref
           writeTVar ref $ x : xs

@@ -6,6 +6,7 @@ import qualified Hasql.Encoders as E
 import qualified Hasql.Decoders as D
 import           Control.Exception
 import           Data.Function
+import           Data.ByteString (ByteString)
 
 {-|Enqueue a list of payloads.
 -}
@@ -31,6 +32,8 @@ any entries 'withDequeue' will wrap the list in 'Just'.
 -}
 withDequeue :: Connection
             -- ^ Connection
+            -> ByteString
+            -- ^ Optional filter
             -> D.Value a
             -- ^ Payload decoder
             -> Int
@@ -79,6 +82,8 @@ withDequeueWith :: forall e a b
                  . Exception e
                 => Connection
                 -- ^ Connection
+                -> ByteString
+                -- ^ Optional filter
                 -> D.Value a
                 -- ^ Payload decoder
                 -> Int
@@ -88,8 +93,8 @@ withDequeueWith :: forall e a b
                 -> ([a] -> IO b)
                 -- ^ Continuation
                 -> IO (Maybe b)
-withDequeueWith conn decoder retryCount count f = (fix $ \restart i -> do
-    try (flip I.runThrow conn $ I.withDequeue decoder retryCount count f) >>= \case
+withDequeueWith conn theFilter decoder retryCount count f = (fix $ \restart i -> do
+    try (flip I.runThrow conn $ I.withDequeue theFilter decoder retryCount count f) >>= \case
       Right x -> pure x
       Left (e :: e) ->
         if i < retryCount then
