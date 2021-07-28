@@ -142,8 +142,8 @@ spec = describe "Hasql.Queue.Low.AtLeastOnce" $ aroundAll withSetup $ describe "
     let Just decoded = mapM (decode . encode) xs
     sort decoded `shouldBe` sort expected
 
-  it "enqueue returns a PayloadId that cooresponds to the entry it added" $ withConnection $ \conn -> do
+  it "enqueue returns a PayloadId that corresponds to the entry it added" $ withConnection $ \conn -> do
     [payloadId] <- I.runThrow (I.enqueuePayload E.int4 [1]) conn
     Just actual <- getPayload conn D.int4 payloadId
 
-    pValue actual `shouldBe` 1
+    pId actual `shouldBe` payloadId

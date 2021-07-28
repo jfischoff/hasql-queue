@@ -58,30 +58,13 @@ dequeue valueDecoder count
   | count <= 0 = pure []
   | otherwise = do
   let multipleQuery = [here|
-        DELETE FROM payloads
-        WHERE id in
-          ( SELECT p1.id
-            FROM payloads AS p1
-            WHERE p1.state='enqueued'
-            ORDER BY p1.modified_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT $1
-          )
-        RETURNING value
+        SELECT value FROM dequeue_payload($1)
       |]
+
       multipleEncoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
 
       singleQuery = [here|
-        DELETE FROM payloads
-        WHERE id =
-          ( SELECT p1.id
-            FROM payloads AS p1
-            WHERE p1.state='enqueued'
-            ORDER BY p1.modified_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-          )
-        RETURNING value
+        SELECT value FROM dequeue_payload(1)
       |]
 
       singleEncoder = mempty
