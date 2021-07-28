@@ -1,13 +1,13 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.2.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 956ae93525f9dafcc0c9c8149cd2bbc8cfcfe4e63310adec92ce40f995e4cbf4
+-- hash: 30a78bb71c0fb6470ad0d6b6788b23f19801ab253d1c65e008a48e329e01b914
 
 name:           hasql-queue
-version:        1.2.0.1
+version:        1.3.0.0
 synopsis:       A PostgreSQL backed queue
 description:    A PostgreSQL backed queue. Please see README.md
 category:       Web
@@ -18,7 +18,8 @@ maintainer:     jonathangfischoff@gmail.com
 copyright:      2020 Jonathan Fischoff
 license:        BSD3
 license-file:   LICENSE
-tested-with:    GHC ==8.8.1
+tested-with:
+    GHC ==8.8.1
 build-type:     Simple
 extra-source-files:
     README.md
@@ -42,7 +43,16 @@ library
       Paths_hasql_queue
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  default-extensions:
+      OverloadedStrings
+      LambdaCase
+      RecordWildCards
+      TupleSections
+      GeneralizedNewtypeDeriving
+      QuasiQuotes
+      ScopedTypeVariables
+      TypeApplications
+      AllowAmbiguousTypes
   ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls
   build-depends:
       aeson
@@ -67,7 +77,16 @@ executable benchmark
       Paths_hasql_queue
   hs-source-dirs:
       benchmarks
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  default-extensions:
+      OverloadedStrings
+      LambdaCase
+      RecordWildCards
+      TupleSections
+      GeneralizedNewtypeDeriving
+      QuasiQuotes
+      ScopedTypeVariables
+      TypeApplications
+      AllowAmbiguousTypes
   ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -98,7 +117,16 @@ executable hasql-queue-tmp-db
       Paths_hasql_queue
   hs-source-dirs:
       hasql-queue-tmp-db
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  default-extensions:
+      OverloadedStrings
+      LambdaCase
+      RecordWildCards
+      TupleSections
+      GeneralizedNewtypeDeriving
+      QuasiQuotes
+      ScopedTypeVariables
+      TypeApplications
+      AllowAmbiguousTypes
   ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N -g2
   build-depends:
       aeson
@@ -137,7 +165,16 @@ test-suite unit-tests
       Paths_hasql_queue
   hs-source-dirs:
       test
-  default-extensions: OverloadedStrings LambdaCase RecordWildCards TupleSections GeneralizedNewtypeDeriving QuasiQuotes ScopedTypeVariables TypeApplications AllowAmbiguousTypes
+  default-extensions:
+      OverloadedStrings
+      LambdaCase
+      RecordWildCards
+      TupleSections
+      GeneralizedNewtypeDeriving
+      QuasiQuotes
+      ScopedTypeVariables
+      TypeApplications
+      AllowAmbiguousTypes
   ghc-options: -Wall -Wno-unused-do-bind -Wno-unused-foralls -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson

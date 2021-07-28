@@ -62,10 +62,6 @@ newtype PayloadId = PayloadId { unPayloadId :: Int64 }
 data Payload a = Payload
   { pId         :: PayloadId
   , pState      :: State
-  -- TODO do I need this?
-  , pAttempts   :: Int
-  , pModifiedAt :: Int
-  -- TODO rename. I don't need this either.
   , pValue      :: a
   } deriving (Show, Eq)
 
@@ -75,8 +71,6 @@ payloadDecoder thePayloadDecoder
    =  Payload
   <$> payloadIdRow
   <*> D.column (D.nonNullable stateDecoder)
-  <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
-  <*> D.column (D.nonNullable $ fromIntegral <$> D.int4)
   <*> D.column (D.nonNullable thePayloadDecoder)
 
 payloadIdEncoder :: E.Value PayloadId
@@ -92,9 +86,7 @@ payloadIdRow = D.column (D.nonNullable payloadIdDecoder)
 enqueuePayload :: E.Value a -> [a] -> Session [PayloadId]
 enqueuePayload theEncoder values = do
   let theQuery = [here|
-        INSERT INTO payloads (attempts, value)
-        SELECT 0, * FROM unnest($1)
-        RETURNING id
+        SELECT id FROM enqueue_payload($1)
         |]
       encoder = E.param $ E.nonNullable $ E.foldableArray $ E.nonNullable theEncoder
       decoder = D.rowList (D.column (D.nonNullable payloadIdDecoder))
@@ -105,30 +97,15 @@ enqueuePayload theEncoder values = do
 dequeuePayload :: D.Value a -> Int -> Session [Payload a]
 dequeuePayload valueDecoder count = do
   let multipleQuery = [here|
-        DELETE FROM payloads
-        WHERE id in
-          ( SELECT p1.id
-            FROM payloads AS p1
-            WHERE p1.state='enqueued'
-            ORDER BY p1.modified_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT $1
-          )
-        RETURNING id, state, attempts, modified_at, value
+        SELECT id, state, value
+        FROM dequeue_payload($1)
       |]
+
       multipleEncoder = E.param $ E.nonNullable $ fromIntegral >$< E.int4
 
       singleQuery = [here|
-        DELETE FROM payloads
-        WHERE id =
-          ( SELECT p1.id
-            FROM payloads AS p1
-            WHERE p1.state='enqueued'
-            ORDER BY p1.modified_at ASC
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-          )
-        RETURNING id, state, attempts, modified_at, value
+        SELECT id, state, value
+        FROM dequeue_payload(1)
       |]
 
       singleEncoder = mempty
@@ -144,7 +121,7 @@ dequeuePayload valueDecoder count = do
 getPayload :: D.Value a -> PayloadId -> Session (Maybe (Payload a))
 getPayload decoder payloadId = do
   let theQuery = [here|
-    SELECT id, state, attempts, modified_at, value
+    SELECT id, state, value
     FROM payloads
     WHERE id = $1
   |]
@@ -168,10 +145,7 @@ getCount = do
 incrementAttempts :: Int -> [PayloadId] -> Session ()
 incrementAttempts retryCount pids = do
   let theQuery = [here|
-        UPDATE payloads
-        SET state=CASE WHEN attempts >= $1 THEN 'failed' :: state_t ELSE 'enqueued' END
-          , attempts=attempts+1
-        WHERE id = ANY($2)
+        SELECT increment_payload_attempts($1, $2)
         |]
       encoder = (fst >$< E.param (E.nonNullable E.int4)) <>
                 (snd >$< E.param (E.nonNullable $ E.foldableArray $ E.nonNullable payloadIdEncoder))

@@ -62,6 +62,36 @@ migrationQueryString valueType = [i|
   CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at)
     WHERE (state = 'enqueued');
 
+  CREATE OR REPLACE FUNCTION dequeue_payload(limit_ INT) RETURNS SETOF payloads AS
+  $$
+      WITH available AS
+        ( SELECT p1.id
+          FROM payloads AS p1
+          WHERE p1.state='enqueued'
+          ORDER BY p1.modified_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT limit_
+        )
+      DELETE FROM payloads
+      USING available
+      WHERE payloads.id = available.id
+      RETURNING payloads.*
+  $$ LANGUAGE SQL VOLATILE;
+
+  CREATE OR REPLACE FUNCTION increment_payload_attempts(threshold_ INT, ids_ BIGINT[]) RETURNS VOID AS
+  $$
+      UPDATE payloads
+      SET state=CASE WHEN attempts >= threshold_ THEN 'failed' :: state_t ELSE 'enqueued' END
+        , attempts=attempts+1
+      WHERE id = ANY(ids_)
+  $$ LANGUAGE SQL VOLATILE;
+
+  CREATE OR REPLACE FUNCTION enqueue_payload(values_ ${valueType}[]) RETURNS SETOF payloads AS
+  $$
+      INSERT INTO payloads (attempts, value)
+      SELECT 0, * FROM unnest(values_)
+      RETURNING *
+  $$ LANGUAGE SQL VOLATILE;
 |]
 
 {-| This function creates a table and enumeration type that is
@@ -106,6 +136,37 @@ migrationQueryString valueType = [i|
 
   CREATE INDEX IF NOT EXISTS active_modified_at_idx ON payloads USING btree (modified_at, state)
     WHERE (state = 'enqueued');
+
+  CREATE OR REPLACE FUNCTION dequeue_payload(limit_ INT) RETURNS SETOF payloads AS
+  $$
+      WITH available AS
+        ( SELECT p1.id
+          FROM payloads AS p1
+          WHERE p1.state='enqueued'
+          ORDER BY p1.modified_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT limit_
+        )
+      DELETE FROM payloads
+      USING available
+      WHERE payloads.id = available.id
+      RETURNING payloads.*
+  $$ LANGUAGE SQL VOLATILE;
+
+  CREATE OR REPLACE FUNCTION increment_payload_attempts(threshold_ INT, ids_ BIGINT[]) RETURNS VOID AS
+  $$
+      UPDATE payloads
+      SET state=CASE WHEN attempts >= threshold_ THEN 'failed' :: state_t ELSE 'enqueued' END
+        , attempts=attempts+1
+      WHERE id = ANY(ids_)
+  $$ LANGUAGE SQL VOLATILE;
+
+  CREATE OR REPLACE FUNCTION enqueue_payload(values_ ${valueType}[]) RETURNS SETOF payloads AS
+  $$
+      INSERT INTO payloads (attempts, value)
+      SELECT 0, * FROM unnest(values_)
+      RETURNING *
+  $$ LANGUAGE SQL VOLATILE;
  @
 
 The @VALUE_TYPE@ needs to passed in through the second argument.
@@ -123,6 +184,9 @@ Drop everything created by 'migrate'
 teardown :: Connection -> IO ()
 teardown conn = do
   let theQuery = [i|
+        DROP FUNCTION IF EXISTS enqueue_payload;
+        DROP FUNCTION IF EXISTS dequeue_payload;
+        DROP FUNCTION IF EXISTS increment_payload_attempts;
         DROP TABLE IF EXISTS payloads;
         DROP TYPE IF EXISTS state_t;
         DROP SEQUENCE IF EXISTS modified_index;
